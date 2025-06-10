@@ -1,0 +1,9 @@
+[package]
+name = "librqbit-dualstack-sockets"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.98"
+socket2 = "0.5.10"
+tokio = { version = "1.45.1", features = ["net"] }
