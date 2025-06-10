@@ -72,6 +72,7 @@ fn setup_test_logging() {
                 .unwrap(),
         )
         .try_init();
+    unsafe { std::env::set_var("RUST_BACKTRACE", "1") }
 }
 
 async fn test_tcp(server: BindSpec, tests: &[SendAssertion]) {
