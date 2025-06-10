@@ -79,6 +79,8 @@ impl MaybeDualstackSocket<Socket> {
             }),
         )?;
 
+        let mut set_dualstack = false;
+
         let addr_kind = match (request_dualstack, addr) {
             (request_dualstack, SocketAddr::V6(addr))
                 if *addr.ip() == IpAddr::V6(Ipv6Addr::UNSPECIFIED) =>
@@ -89,6 +91,7 @@ impl MaybeDualstackSocket<Socket> {
                     .set_only_v6(value)
                     .with_context(|| format!("error setting only_v6={value}"))?;
                 trace!(?addr, only_v6=?socket.only_v6().context("error getting only_v6"));
+                set_dualstack = true;
                 SocketAddrKind::V6 {
                     addr,
                     is_dualstack: request_dualstack,
@@ -100,6 +103,13 @@ impl MaybeDualstackSocket<Socket> {
             },
             (_, SocketAddr::V4(addr)) => SocketAddrKind::V4(addr),
         };
+
+        if !set_dualstack {
+            debug!(
+                ?addr,
+                "ignored dualstack request as it only applies to [::] address"
+            );
+        }
 
         socket
             .bind(&addr.into())
