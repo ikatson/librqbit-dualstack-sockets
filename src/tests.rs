@@ -13,17 +13,14 @@ use tracing_subscriber::EnvFilter;
 
 const TIMEOUT: Duration = Duration::from_secs(100);
 
-// Helper function to get an available IPv4 address (localhost)
 fn ipv4_localhost() -> SocketAddr {
     (Ipv4Addr::LOCALHOST, 0).into()
 }
 
-// Helper function to get an available IPv6 address (localhost)
 fn ipv6_localhost() -> SocketAddr {
     (Ipv6Addr::LOCALHOST, 0).into()
 }
 
-// Helper function to get an unspecified IPv6 address
 fn ipv6_unspecified() -> SocketAddr {
     (Ipv6Addr::UNSPECIFIED, 0).into()
 }
