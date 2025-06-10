@@ -22,4 +22,4 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run tests
-        run: RUST_BACKTRACE=1 cargo test
+        run: cargo test
