@@ -90,6 +90,7 @@ impl MaybeDualstackSocket<Socket> {
                 socket
                     .set_only_v6(value)
                     .with_context(|| format!("error setting only_v6={value}"))?;
+                #[cfg(not(windows))] // socket.only_v6() panics on windows somehow
                 trace!(?addr, only_v6=?socket.only_v6().context("error getting only_v6"));
                 set_dualstack = true;
                 SocketAddrKind::V6 {
