@@ -2,6 +2,13 @@ use std::net::{SocketAddr, SocketAddrV6};
 
 pub trait TryToV4 {
     fn try_to_ipv4(&self) -> SocketAddr;
+
+    #[cfg(test)]
+    fn to_v4(&self) -> SocketAddr {
+        let a = self.try_to_ipv4();
+        assert!(a.is_ipv4());
+        a
+    }
 }
 
 pub trait ToV6Mapped {

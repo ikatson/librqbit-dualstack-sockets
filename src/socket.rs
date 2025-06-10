@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::Context;
 use socket2::{Domain, Socket};
+use tracing::{debug, trace};
 
 use crate::addr::{ToV6Mapped, TryToV4};
 
@@ -79,13 +80,18 @@ impl MaybeDualstackSocket<Socket> {
         )?;
 
         let addr_kind = match (request_dualstack, addr) {
-            (true, SocketAddr::V6(addr)) if *addr.ip() == IpAddr::V6(Ipv6Addr::UNSPECIFIED) => {
+            (request_dualstack, SocketAddr::V6(addr))
+                if *addr.ip() == IpAddr::V6(Ipv6Addr::UNSPECIFIED) =>
+            {
+                let value = !request_dualstack;
+                trace!(?addr, only_v6 = value, "setting only_v6");
                 socket
-                    .set_only_v6(false)
-                    .context("error setting only_v6=false")?;
+                    .set_only_v6(value)
+                    .with_context(|| format!("error setting only_v6={value}"))?;
+                trace!(?addr, only_v6=?socket.only_v6().context("error getting only_v6"));
                 SocketAddrKind::V6 {
                     addr,
-                    is_dualstack: true,
+                    is_dualstack: request_dualstack,
                 }
             }
             (_, SocketAddr::V6(addr)) => SocketAddrKind::V6 {
@@ -100,6 +106,24 @@ impl MaybeDualstackSocket<Socket> {
             .context(addr)
             .context("error binding")?;
 
+        let local_addr: SocketAddr = socket
+            .local_addr()?
+            .as_socket()
+            .context("as_socket returned None")?;
+
+        let addr_kind = match (addr_kind, local_addr) {
+            (SocketAddrKind::V4(..), SocketAddr::V4(received)) => SocketAddrKind::V4(received),
+            (SocketAddrKind::V6 { is_dualstack, .. }, SocketAddr::V6(received)) => {
+                SocketAddrKind::V6 {
+                    addr: received,
+                    is_dualstack,
+                }
+            }
+            _ => anyhow::bail!(
+                "mismatch between local_addr({local_addr:?}) and requested bind_addr({addr:?})"
+            ),
+        };
+
         socket
             .set_nonblocking(true)
             .context("error setting nonblocking=true")?;
@@ -109,8 +133,15 @@ impl MaybeDualstackSocket<Socket> {
 }
 
 impl MaybeDualstackSocket<tokio::net::TcpListener> {
-    pub async fn bind_tcp(addr: SocketAddr, request_dualstack: bool) -> anyhow::Result<Self> {
+    pub fn bind_tcp(addr: SocketAddr, request_dualstack: bool) -> anyhow::Result<Self> {
         let sock = MaybeDualstackSocket::bind(addr, request_dualstack, false)?;
+
+        debug!(addr=?sock.bind_addr(), requested_addr=?addr, dualstack = sock.is_dualstack(), "listening on TCP");
+
+        sock.socket()
+            .set_reuse_address(true)
+            .context("error setting SO_REUSEADDR")?;
+        sock.socket().listen(1024).context("error listening")?;
 
         Ok(Self {
             socket: tokio::net::TcpListener::from_std(std::net::TcpListener::from(sock.socket))?,
@@ -125,8 +156,10 @@ impl MaybeDualstackSocket<tokio::net::TcpListener> {
 }
 
 impl MaybeDualstackSocket<tokio::net::UdpSocket> {
-    pub async fn bind_udp(addr: SocketAddr, request_dualstack: bool) -> anyhow::Result<Self> {
+    pub fn bind_udp(addr: SocketAddr, request_dualstack: bool) -> anyhow::Result<Self> {
         let sock = MaybeDualstackSocket::bind(addr, request_dualstack, true)?;
+
+        debug!(addr=?sock.bind_addr(), requested_addr=?addr, dualstack = sock.is_dualstack(), "listening on UDP");
 
         Ok(Self {
             socket: tokio::net::UdpSocket::from_std(std::net::UdpSocket::from(sock.socket))?,

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::socket::MaybeDualstackSocket;
 
 pub mod addr;
