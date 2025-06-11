@@ -1,6 +1,6 @@
 [package]
 name = "librqbit-dualstack-sockets"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 description = "utilities for creating dual-stack TCP and UDP tokio sockets"

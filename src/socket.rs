@@ -112,6 +112,15 @@ impl MaybeDualstackSocket<Socket> {
             );
         }
 
+        #[cfg(not(windows))]
+        {
+            if !is_udp {
+                socket
+                    .set_reuse_address(true)
+                    .context("error setting SO_REUSEADDR")?;
+            }
+        }
+
         socket
             .bind(&addr.into())
             .context(addr)
@@ -148,10 +157,6 @@ impl MaybeDualstackSocket<tokio::net::TcpListener> {
         let sock = MaybeDualstackSocket::bind(addr, request_dualstack, false)?;
 
         debug!(addr=?sock.bind_addr(), requested_addr=?addr, dualstack = sock.is_dualstack(), "listening on TCP");
-
-        sock.socket()
-            .set_reuse_address(true)
-            .context("error setting SO_REUSEADDR")?;
         sock.socket().listen(1024).context("error listening")?;
 
         Ok(Self {
