@@ -1,6 +1,6 @@
 [package]
 name = "librqbit-dualstack-sockets"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 
 description = "utilities for creating dual-stack TCP and UDP tokio sockets"
@@ -10,12 +10,13 @@ repository = "https://github.com/ikatson/librqbit-dualstack-sockets"
 readme = "README.md"
 
 [dependencies]
-anyhow = "1.0.98"
 socket2 = "0.5.10"
+thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["net"] }
 tracing = "0.1.41"
 
 [dev-dependencies]
+anyhow = "1"
 tokio = { version = "1.45.1", features = [
     "macros",
     "rt-multi-thread",

@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests;
 
+mod error;
+pub use error::{Error, Result};
+
 use crate::socket::MaybeDualstackSocket;
 
 pub mod addr;
