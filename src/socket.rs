@@ -124,9 +124,10 @@ impl MaybeDualstackSocket<Socket> {
             }
         }
 
-        socket
-            .bind(&addr.into())
-            .map_err(|source| Error::Bind { addr, source })?;
+        socket.bind(&addr.into()).map_err(|e| {
+            trace!(?addr, "error binding: {e:#}");
+            Error::Bind(e)
+        })?;
 
         let local_addr: SocketAddr = socket
             .local_addr()
@@ -143,10 +144,8 @@ impl MaybeDualstackSocket<Socket> {
                 }
             }
             _ => {
-                return Err(Error::LocalBindAddrMismatch {
-                    local_addr,
-                    bind_addr: addr,
-                });
+                tracing::debug!(?local_addr, bind_addr=?addr, "mismatch between local_addr() and requested bind_addr");
+                return Err(Error::LocalBindAddrMismatch);
             }
         };
 
