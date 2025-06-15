@@ -11,3 +11,6 @@ pub mod socket;
 
 pub type TcpListener = MaybeDualstackSocket<tokio::net::TcpListener>;
 pub type UdpSocket = MaybeDualstackSocket<tokio::net::UdpSocket>;
+
+#[cfg(feature = "axum")]
+pub use socket::axum::WrappedSocketAddr;

@@ -178,26 +178,63 @@ impl MaybeDualstackSocket<tokio::net::TcpListener> {
 }
 
 #[cfg(feature = "axum")]
-impl axum::serve::Listener for MaybeDualstackSocket<tokio::net::TcpListener> {
-    type Io = tokio::net::TcpStream;
+pub mod axum {
+    use std::net::SocketAddr;
 
-    type Addr = SocketAddr;
+    use crate::socket::MaybeDualstackSocket;
 
-    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
-        use backon::{ExponentialBuilder, Retryable};
-        (|| MaybeDualstackSocket::accept(self))
-            .retry(
-                ExponentialBuilder::new()
-                    .without_max_times()
-                    .with_max_delay(std::time::Duration::from_secs(5)),
-            )
-            .notify(|e, retry_in| tracing::trace!(?retry_in, "error accepting: {e:#}"))
-            .await
-            .unwrap()
+    #[derive(Clone, Copy)]
+    pub struct WrappedSocketAddr(pub SocketAddr);
+    impl core::fmt::Debug for WrappedSocketAddr {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self.0)
+        }
+    }
+    impl From<SocketAddr> for WrappedSocketAddr {
+        fn from(value: SocketAddr) -> Self {
+            Self(value)
+        }
+    }
+    impl From<WrappedSocketAddr> for SocketAddr {
+        fn from(value: WrappedSocketAddr) -> Self {
+            value.0
+        }
     }
 
-    fn local_addr(&self) -> tokio::io::Result<Self::Addr> {
-        Ok(self.bind_addr())
+    impl axum::serve::Listener for MaybeDualstackSocket<tokio::net::TcpListener> {
+        type Io = tokio::net::TcpStream;
+
+        type Addr = WrappedSocketAddr;
+
+        async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+            use backon::{ExponentialBuilder, Retryable};
+            let (l, a) = (|| MaybeDualstackSocket::accept(self))
+                .retry(
+                    ExponentialBuilder::new()
+                        .without_max_times()
+                        .with_max_delay(std::time::Duration::from_secs(5)),
+                )
+                .notify(|e, retry_in| tracing::trace!(?retry_in, "error accepting: {e:#}"))
+                .await
+                .unwrap();
+            (l, a.into())
+        }
+
+        fn local_addr(&self) -> tokio::io::Result<Self::Addr> {
+            Ok(self.bind_addr().into())
+        }
+    }
+
+    impl
+        axum::extract::connect_info::Connected<
+            axum::serve::IncomingStream<'_, MaybeDualstackSocket<tokio::net::TcpListener>>,
+        > for WrappedSocketAddr
+    {
+        fn connect_info(
+            stream: axum::serve::IncomingStream<'_, MaybeDualstackSocket<tokio::net::TcpListener>>,
+        ) -> Self {
+            *stream.remote_addr()
+        }
     }
 }
 
