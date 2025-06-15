@@ -1,6 +1,6 @@
 [package]
 name = "librqbit-dualstack-sockets"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 
 description = "utilities for creating dual-stack TCP and UDP tokio sockets"
@@ -10,6 +10,11 @@ repository = "https://github.com/ikatson/librqbit-dualstack-sockets"
 readme = "README.md"
 
 [dependencies]
+axum = { version = "0.8.4", default-features = false, optional = true, features = [
+    "tokio",
+    "http1",
+] }
+backon = "1.5.1"
 socket2 = "0.5.10"
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["net"] }
@@ -25,3 +30,6 @@ tokio = { version = "1.45.1", features = [
 ] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+# [features]
+# axum = ["dep:axum"]

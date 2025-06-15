@@ -177,6 +177,30 @@ impl MaybeDualstackSocket<tokio::net::TcpListener> {
     }
 }
 
+#[cfg(feature = "axum")]
+impl axum::serve::Listener for MaybeDualstackSocket<tokio::net::TcpListener> {
+    type Io = tokio::net::TcpStream;
+
+    type Addr = SocketAddr;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        use backon::{ExponentialBuilder, Retryable};
+        (|| MaybeDualstackSocket::accept(self))
+            .retry(
+                ExponentialBuilder::new()
+                    .without_max_times()
+                    .with_max_delay(std::time::Duration::from_secs(5)),
+            )
+            .notify(|e, retry_in| tracing::trace!(?retry_in, "error accepting: {e:#}"))
+            .await
+            .unwrap()
+    }
+
+    fn local_addr(&self) -> tokio::io::Result<Self::Addr> {
+        Ok(self.bind_addr())
+    }
+}
+
 impl MaybeDualstackSocket<tokio::net::UdpSocket> {
     pub fn bind_udp(addr: SocketAddr, request_dualstack: bool) -> crate::Result<Self> {
         let sock = MaybeDualstackSocket::bind(addr, request_dualstack, true)?;
