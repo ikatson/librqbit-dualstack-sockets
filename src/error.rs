@@ -22,6 +22,12 @@ pub enum Error {
     TokioFromStd(std::io::Error),
     #[error("did not join any multicast groups")]
     MulticastJoinFail,
+    #[error("provided link-local address is not link-local")]
+    ProvidedLinkLocalAddrIsntLinkLocal,
+    #[error("no network interfaces found")]
+    NoNics,
+    #[error("provided site-local address is link-local")]
+    ProvidedSiteLocalAddrIsLinkLocal,
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

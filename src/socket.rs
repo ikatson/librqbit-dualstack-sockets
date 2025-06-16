@@ -1,14 +1,13 @@
 use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     task::Poll,
 };
 
-use network_interface::NetworkInterfaceConfig;
 use socket2::{Domain, Socket};
 use tracing::{debug, trace};
 
 use crate::{
-    Error, UdpSocket,
+    Error,
     addr::{ToV6Mapped, TryToV4},
 };
 
@@ -271,81 +270,4 @@ impl MaybeDualstackSocket<tokio::net::UdpSocket> {
         let target = self.convert_addr_for_send(target);
         self.socket.poll_send_to(cx, buf, target)
     }
-
-    pub fn bind_multicast(
-        &self,
-        ipv4_addr: Ipv4Addr,
-        ipv6_addrs: &[Ipv6Addr],
-    ) -> crate::Result<()> {
-        let mut joined = try_join_v4(self, ipv4_addr, Ipv4Addr::UNSPECIFIED);
-
-        for nic in network_interface::NetworkInterface::show()
-            .into_iter()
-            .flatten()
-        {
-            let mut has_link_local = false;
-            let mut has_site_local = false;
-
-            for addr in nic.addr.into_iter() {
-                match addr.ip() {
-                    IpAddr::V4(iface_addr)
-                        if iface_addr.is_private() && !iface_addr.is_loopback() =>
-                    {
-                        joined |= try_join_v4(self, ipv4_addr, iface_addr);
-                    }
-                    IpAddr::V6(addr) => {
-                        if addr.is_loopback() {
-                            continue;
-                        }
-                        if ipv6_is_link_local(addr) {
-                            has_link_local = true;
-                        } else {
-                            has_site_local = true;
-                        }
-                    }
-                    _ => continue,
-                }
-            }
-
-            for maddr in ipv6_addrs.iter().copied() {
-                match (has_link_local, has_site_local, ipv6_is_link_local(maddr)) {
-                    (true, _, true) | (_, true, false) => {
-                        joined |= try_join_v6(self, maddr, nic.index);
-                    }
-                    _ => continue,
-                }
-            }
-        }
-
-        if !joined {
-            return Err(Error::MulticastJoinFail);
-        }
-
-        Ok(())
-    }
-}
-
-fn try_join_v4(sock: &UdpSocket, addr: Ipv4Addr, iface: Ipv4Addr) -> bool {
-    trace!(multiaddr=?addr, interface=?iface, "joining multicast v4 group");
-    if let Err(e) = sock.socket().join_multicast_v4(addr, iface) {
-        debug!(multiaddr=?addr, interface=?iface, "error joining multicast v4 group: {e:#}");
-        return false;
-    }
-    true
-}
-
-fn try_join_v6(sock: &UdpSocket, addr: Ipv6Addr, ifindex: u32) -> bool {
-    trace!(multiaddr=?addr, interface=?ifindex, "joining multicast v6 group");
-    if let Err(e) = sock.socket().join_multicast_v6(&addr, ifindex) {
-        debug!(multiaddr=?addr, interface=?ifindex, "error joining multicast v6 group: {e:#}");
-        return false;
-    }
-    true
-}
-
-fn ipv6_is_link_local(ip: Ipv6Addr) -> bool {
-    const LL: Ipv6Addr = Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 0);
-    const MASK: Ipv6Addr = Ipv6Addr::new(0xffff, 0xffff, 0xffff, 0xffff, 0, 0, 0, 0);
-
-    ip.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
 }

@@ -2,6 +2,7 @@
 mod tests;
 
 mod error;
+mod multicast;
 pub use error::{Error, Result};
 
 use crate::socket::MaybeDualstackSocket;
@@ -11,6 +12,7 @@ pub mod socket;
 
 pub type TcpListener = MaybeDualstackSocket<tokio::net::TcpListener>;
 pub type UdpSocket = MaybeDualstackSocket<tokio::net::UdpSocket>;
+pub use multicast::{MulticastOpts, MulticastUdpSocket};
 
 #[cfg(feature = "axum")]
 pub use socket::axum::WrappedSocketAddr;
