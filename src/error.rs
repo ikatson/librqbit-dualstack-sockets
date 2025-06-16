@@ -20,6 +20,8 @@ pub enum Error {
     Listen(std::io::Error),
     #[error("error calling tokio from_std")]
     TokioFromStd(std::io::Error),
+    #[error("did not join any multicast groups")]
+    MulticastJoinFail,
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

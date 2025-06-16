@@ -19,6 +19,7 @@ socket2 = "0.5.10"
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["net"] }
 tracing = "0.1.41"
+network-interface = { version = "2" }
 
 [dev-dependencies]
 anyhow = "1"
