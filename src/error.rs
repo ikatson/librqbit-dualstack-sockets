@@ -26,8 +26,8 @@ pub enum Error {
     ProvidedLinkLocalAddrIsntLinkLocal,
     #[error("no network interfaces found")]
     NoNics,
-    #[error("provided site-local address is link-local")]
-    ProvidedSiteLocalAddrIsLinkLocal,
+    #[error("provided site-local address is not site-local")]
+    ProvidedSiteLocalAddrIsNotSiteLocal,
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

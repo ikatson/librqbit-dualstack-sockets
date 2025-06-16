@@ -258,6 +258,7 @@ impl MaybeDualstackSocket<tokio::net::UdpSocket> {
 
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> std::io::Result<usize> {
         let target = self.convert_addr_for_send(target);
+        trace!(?target, "sending");
         self.socket.send_to(buf, target).await
     }
 
