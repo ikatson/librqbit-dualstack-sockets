@@ -29,6 +29,7 @@ async fn multicast_example() {
         SSDP_MCAST_IPV6_SITE_LOCAL,
         Some(SSDP_MCAST_IPV6_LINK_LOCAL),
     )
+    .await
     .unwrap();
 
     let recv = async {

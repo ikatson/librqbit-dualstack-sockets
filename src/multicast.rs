@@ -11,6 +11,7 @@ use std::{
     task::Poll,
 };
 
+use bstr::BStr;
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use parking_lot::RwLock;
 use socket2::SockRef;
@@ -37,7 +38,7 @@ pub struct MulticastUdpSocket {
 }
 
 impl MulticastUdpSocket {
-    pub fn new(
+    pub async fn new(
         port: u16,
         ipv4_addr: Ipv4Addr,
         ipv6_site_local: Ipv6Addr,
@@ -72,7 +73,7 @@ impl MulticastUdpSocket {
             ipv6_site_local,
             nics,
         };
-        sock.bind_multicast()?;
+        sock.bind_multicast().await?;
         Ok(sock)
     }
 
@@ -82,6 +83,7 @@ impl MulticastUdpSocket {
 
     pub async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, SocketAddr)> {
         std::future::poll_fn(|cx| {
+            trace!("recv_from poll enter");
             let mut buf = tokio::io::ReadBuf::new(buf);
             if let Poll::Ready(res) = self.sock_v4.socket().poll_recv_from(cx, &mut buf) {
                 return Poll::Ready(res.map(|addr| (buf.filled().len(), addr)));
@@ -89,6 +91,7 @@ impl MulticastUdpSocket {
             if let Poll::Ready(res) = self.sock_v6.socket().poll_recv_from(cx, &mut buf) {
                 return Poll::Ready(res.map(|addr| (buf.filled().len(), addr)));
             }
+            trace!("recv_from poll exit: pending");
             Poll::Pending
         })
         .await
@@ -100,10 +103,14 @@ impl MulticastUdpSocket {
         } else {
             &self.sock_v4
         };
-        sock.send_to(buf, addr).await
+        std::future::poll_fn(|cx| {
+            trace!("poll send");
+            sock.poll_send_to(cx, buf, addr)
+        })
+        .await
     }
 
-    fn bind_multicast(&self) -> crate::Result<()> {
+    async fn bind_multicast(&self) -> crate::Result<()> {
         let mut joined = try_join_v4(&self.sock_v4, self.ipv4_addr, Ipv4Addr::UNSPECIFIED);
 
         for nic in self.nics.iter() {
@@ -145,6 +152,13 @@ impl MulticastUdpSocket {
         if !joined {
             return Err(Error::MulticastJoinFail);
         }
+
+        for sock in [&self.sock_v4, &self.sock_v6] {
+            trace!(addr=?sock.bind_addr(), "waiting for writeable");
+            sock.socket().writable().await.map_err(Error::Writeable)?;
+        }
+
+        trace!("done waiting");
 
         Ok(())
     }
@@ -412,7 +426,10 @@ impl SharedMulticastUdpSocket {
         let mut buf = [0u8; 4096];
         let mut replies = Vec::new();
         loop {
+            trace!("recv_from poll");
             let (sz, addr) = self.sock.recv_from(&mut buf).await?;
+
+            trace!(data = ?BStr::new(&buf[..sz]), "received");
 
             for (_id, handler) in self.handlers.read().iter() {
                 handler(&buf[..sz], addr, &mut replies);
@@ -434,12 +451,13 @@ impl SharedMulticastUdpSocket {
     }
 }
 
-pub fn create_ssdp_socket() -> crate::Result<Arc<SharedMulticastUdpSocket>> {
+pub async fn create_ssdp_socket() -> crate::Result<Arc<SharedMulticastUdpSocket>> {
     let sock = MulticastUdpSocket::new(
         SSDP_PORT,
         SSDP_MCAST_IPV4,
         SSDP_MCAST_IPV6_SITE_LOCAL,
         Some(SSDP_MCAST_IPV6_LINK_LOCAL),
-    )?;
+    )
+    .await?;
     Ok(SharedMulticastUdpSocket::new(sock))
 }

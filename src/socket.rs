@@ -132,16 +132,16 @@ impl MaybeDualstackSocket<Socket> {
 
         #[cfg(not(windows))]
         {
-            if !is_udp {
-                socket
-                    .set_reuse_address(true)
-                    .map_err(Error::ReuseAddress)?;
-            }
+            socket
+                .set_reuse_address(true)
+                .map_err(Error::ReuseAddress)?;
         }
 
         #[cfg(not(windows))]
         if opts.reuseport {
             socket.set_reuse_port(true).map_err(Error::ReusePort)?;
+            debug!(reuse_port=?socket.reuse_port());
+            debug!(reuse_addr=?socket.reuse_address());
         }
 
         socket.bind(&addr.into()).map_err(|e| {

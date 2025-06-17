@@ -30,6 +30,8 @@ pub enum Error {
     ProvidedSiteLocalAddrIsNotSiteLocal,
     #[error("error setting SO_REUSEPORT")]
     ReusePort(std::io::Error),
+    #[error("error waiting for socket to become writeable")]
+    Writeable(std::io::Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
