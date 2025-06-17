@@ -75,6 +75,15 @@ impl MulticastUdpSocket {
         .await
     }
 
+    pub async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> std::io::Result<usize> {
+        let sock = if addr.is_ipv6() {
+            &self.sock_v6
+        } else {
+            &self.sock_v4
+        };
+        sock.send_to(buf, addr).await
+    }
+
     fn bind_multicast(&self) -> crate::Result<()> {
         let mut joined = try_join_v4(&self.sock_v4, self.ipv4_addr, Ipv4Addr::UNSPECIFIED);
 
@@ -145,6 +154,7 @@ impl MulticastUdpSocket {
                 MulticastOpts::V6 {
                     interface_id,
                     mcast_addr,
+                    ..
                 } => {
                     sock = &self.sock_v6;
                     mcast_addr_s = (*mcast_addr).into();
@@ -195,10 +205,12 @@ impl MulticastUdpSocket {
                     },
                     (IpAddr::V6(a), Some(mlocal)) if !a.is_loopback() => MulticastOpts::V6 {
                         interface_id: ifidx,
+                        interface_addr: a,
                         mcast_addr: SocketAddrV6::new(mlocal, port, 0, ifidx),
                     },
                     (IpAddr::V6(a), None) if !a.is_loopback() => MulticastOpts::V6 {
                         interface_id: ifidx,
+                        interface_addr: a,
                         mcast_addr: SocketAddrV6::new(self.ipv6_site_local, port, 0, ifidx),
                     },
                     _ => {
@@ -210,7 +222,11 @@ impl MulticastUdpSocket {
             })
             .map(|opts| async move {
                 let payload = get_payload(&opts);
-                if !sent.lock().unwrap().insert((payload.clone(), opts)) {
+                if !sent
+                    .lock()
+                    .unwrap()
+                    .insert((payload.clone(), opts.uniq_key()))
+                {
                     trace!(?opts, "not sending duplicate payload");
                     return;
                 }
@@ -274,15 +290,37 @@ pub enum MulticastOpts {
     },
     V6 {
         interface_id: u32,
+        interface_addr: Ipv6Addr,
         mcast_addr: SocketAddrV6,
     },
 }
 
 impl MulticastOpts {
-    pub fn addr(&self) -> SocketAddr {
+    pub fn iface_ip(&self) -> IpAddr {
+        match self {
+            MulticastOpts::V4 { interface_addr, .. } => (*interface_addr).into(),
+            MulticastOpts::V6 { interface_addr, .. } => (*interface_addr).into(),
+        }
+    }
+
+    pub fn mcast_addr(&self) -> SocketAddr {
         match self {
             MulticastOpts::V4 { mcast_addr, .. } => (*mcast_addr).into(),
             MulticastOpts::V6 { mcast_addr, .. } => (*mcast_addr).into(),
+        }
+    }
+
+    fn uniq_key(&self) -> (Option<u32>, Option<Ipv4Addr>, SocketAddr) {
+        match self {
+            MulticastOpts::V4 {
+                interface_addr,
+                mcast_addr,
+            } => (None, Some(*interface_addr), (*mcast_addr).into()),
+            MulticastOpts::V6 {
+                interface_id,
+                mcast_addr,
+                ..
+            } => (Some(*interface_id), None, (*mcast_addr).into()),
         }
     }
 }
