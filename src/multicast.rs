@@ -65,6 +65,10 @@ impl MulticastUdpSocket {
         Ok(sock)
     }
 
+    pub fn nics(&self) -> &[NetworkInterface] {
+        &self.nics
+    }
+
     pub async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, SocketAddr)> {
         std::future::poll_fn(|cx| {
             let mut buf = tokio::io::ReadBuf::new(buf);
