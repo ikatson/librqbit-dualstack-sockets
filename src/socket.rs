@@ -139,6 +139,7 @@ impl MaybeDualstackSocket<Socket> {
             }
         }
 
+        #[cfg(not(windows))]
         if opts.reuseport {
             socket.set_reuse_port(true).map_err(Error::ReusePort)?;
         }
