@@ -15,6 +15,8 @@ use tracing::{debug, trace};
 use crate::{Error, UdpSocket};
 
 pub struct MulticastUdpSocket {
+    // At least on OSX, it multicast doesn't seem to work on dualstack sockets, so we need
+    // to create 2 of them.
     sock_v4: UdpSocket,
     sock_v6: UdpSocket,
     ipv4_addr: Ipv4Addr,
@@ -120,49 +122,59 @@ impl MulticastUdpSocket {
     }
 
     async fn send_to_once(&self, buf: &[u8], opts: &MulticastOpts) -> std::io::Result<usize> {
-        // std::future::poll_fn(|cx| {
-        let sock;
-        let mcast_addr_s: SocketAddr;
+        // This is .poll_fn() so that we call .set_multicast() immediately before sending a packet.
+        // If it's repolled it'll get called again just before the send.
 
-        trace!(?opts, "poll");
+        std::future::poll_fn(|cx| {
+            let sock;
+            let mcast_addr_s: SocketAddr;
 
-        match opts {
-            MulticastOpts::V4 {
-                interface_addr,
-                mcast_addr,
-            } => {
-                sock = &self.sock_v4;
-                mcast_addr_s = (*mcast_addr).into();
-                if let Err(e) = SockRef::from(sock.socket()).set_multicast_if_v4(interface_addr) {
-                    debug!(addr=%interface_addr, "error calling set_multicast_if_v4: {e:#}");
+            match opts {
+                MulticastOpts::V4 {
+                    interface_addr,
+                    mcast_addr,
+                } => {
+                    sock = &self.sock_v4;
+                    mcast_addr_s = (*mcast_addr).into();
+                    if let Err(e) = SockRef::from(sock.socket()).set_multicast_if_v4(interface_addr)
+                    {
+                        debug!(addr=%interface_addr, "error calling set_multicast_if_v4: {e:#}");
+                        return Poll::Ready(Err(e));
+                    }
+                }
+                MulticastOpts::V6 {
+                    interface_id,
+                    mcast_addr,
+                } => {
+                    sock = &self.sock_v6;
+                    mcast_addr_s = (*mcast_addr).into();
+                    if let Err(e) = SockRef::from(sock.socket()).set_multicast_if_v6(*interface_id)
+                    {
+                        debug!(
+                            oif_id = interface_id,
+                            "error calling set_multicast_if_v6: {e:#}"
+                        );
+                        return Poll::Ready(Err(e));
+                    }
                 }
             }
-            MulticastOpts::V6 {
-                interface_id,
-                mcast_addr,
-            } => {
-                sock = &self.sock_v6;
-                mcast_addr_s = (*mcast_addr).into();
-                if let Err(e) = SockRef::from(sock.socket()).set_multicast_if_v6(*interface_id) {
-                    debug!(
-                        oif_id = interface_id,
-                        "error calling set_multicast_if_v6: {e:#}"
-                    );
-                }
-            }
-        }
 
-        sock.send_to(buf, mcast_addr_s).await
-
-        // sock.poll_send_to(cx, buf, mcast_addr_s)
-        // })
-        // .await
+            sock.poll_send_to(cx, buf, mcast_addr_s)
+        })
+        .await
     }
 
     pub async fn try_send_mcast_everywhere(
         &self,
         get_payload: &impl Fn(&MulticastOpts) -> bstr::BString,
     ) {
+        // Without this it blocks for some reason. Maybe we need to do it once in new(), so that all multicast joining
+        // messages are actually sent?
+        //
+        // It also works if we call .send_to() vs .poll_send_to() underneath. Maybe a bug in tokio/mio or I'm just
+        // misusing it.
+        let _ = self.sock_v6.socket().writable().await;
+
         let sent = Mutex::new(HashSet::new());
         let sent = &sent;
 
