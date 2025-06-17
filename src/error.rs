@@ -28,6 +28,8 @@ pub enum Error {
     NoNics,
     #[error("provided site-local address is not site-local")]
     ProvidedSiteLocalAddrIsNotSiteLocal,
+    #[error("error setting SO_REUSEPORT")]
+    ReusePort(std::io::Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

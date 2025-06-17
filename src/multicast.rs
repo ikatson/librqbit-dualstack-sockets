@@ -12,7 +12,7 @@ use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use socket2::SockRef;
 use tracing::{debug, trace};
 
-use crate::{Error, UdpSocket};
+use crate::{BindOpts, Error, UdpSocket};
 
 pub struct MulticastUdpSocket {
     // At least on OSX, it multicast doesn't seem to work on dualstack sockets, so we need
@@ -47,8 +47,12 @@ impl MulticastUdpSocket {
         if nics.is_empty() {
             return Err(Error::NoNics);
         }
-        let sock_v4 = UdpSocket::bind_udp((Ipv4Addr::UNSPECIFIED, port).into(), false)?;
-        let sock_v6 = UdpSocket::bind_udp((Ipv6Addr::UNSPECIFIED, port).into(), false)?;
+        let opts = BindOpts {
+            request_dualstack: false,
+            reuseport: true,
+        };
+        let sock_v4 = UdpSocket::bind_udp((Ipv4Addr::UNSPECIFIED, port).into(), opts)?;
+        let sock_v6 = UdpSocket::bind_udp((Ipv6Addr::UNSPECIFIED, port).into(), opts)?;
         let sock = Self {
             sock_v4,
             sock_v6,

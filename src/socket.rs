@@ -29,6 +29,21 @@ impl SocketAddrKind {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct BindOpts {
+    pub request_dualstack: bool,
+    pub reuseport: bool,
+}
+
+impl Default for BindOpts {
+    fn default() -> Self {
+        Self {
+            request_dualstack: true,
+            reuseport: false,
+        }
+    }
+}
+
 pub struct MaybeDualstackSocket<S> {
     socket: S,
     addr_kind: SocketAddrKind,
@@ -62,7 +77,7 @@ impl<S> MaybeDualstackSocket<S> {
 }
 
 impl MaybeDualstackSocket<Socket> {
-    fn bind(addr: SocketAddr, request_dualstack: bool, is_udp: bool) -> crate::Result<Self> {
+    fn bind(addr: SocketAddr, opts: BindOpts, is_udp: bool) -> crate::Result<Self> {
         let socket = Socket::new(
             if addr.is_ipv6() {
                 Domain::IPV6
@@ -84,7 +99,7 @@ impl MaybeDualstackSocket<Socket> {
 
         let mut set_dualstack = false;
 
-        let addr_kind = match (request_dualstack, addr) {
+        let addr_kind = match (opts.request_dualstack, addr) {
             (request_dualstack, SocketAddr::V6(addr))
                 if *addr.ip() == IpAddr::V6(Ipv6Addr::UNSPECIFIED) =>
             {
@@ -124,6 +139,10 @@ impl MaybeDualstackSocket<Socket> {
             }
         }
 
+        if opts.reuseport {
+            socket.set_reuse_port(true).map_err(Error::ReusePort)?;
+        }
+
         socket.bind(&addr.into()).map_err(|e| {
             trace!(?addr, "error binding: {e:#}");
             Error::Bind(e)
@@ -158,8 +177,8 @@ impl MaybeDualstackSocket<Socket> {
 }
 
 impl MaybeDualstackSocket<tokio::net::TcpListener> {
-    pub fn bind_tcp(addr: SocketAddr, request_dualstack: bool) -> crate::Result<Self> {
-        let sock = MaybeDualstackSocket::bind(addr, request_dualstack, false)?;
+    pub fn bind_tcp(addr: SocketAddr, opts: BindOpts) -> crate::Result<Self> {
+        let sock = MaybeDualstackSocket::bind(addr, opts, false)?;
 
         debug!(addr=?sock.bind_addr(), requested_addr=?addr, dualstack = sock.is_dualstack(), "listening on TCP");
         sock.socket().listen(1024).map_err(Error::Listen)?;
@@ -239,8 +258,8 @@ pub mod axum {
 }
 
 impl MaybeDualstackSocket<tokio::net::UdpSocket> {
-    pub fn bind_udp(addr: SocketAddr, request_dualstack: bool) -> crate::Result<Self> {
-        let sock = MaybeDualstackSocket::bind(addr, request_dualstack, true)?;
+    pub fn bind_udp(addr: SocketAddr, opts: BindOpts) -> crate::Result<Self> {
+        let sock = MaybeDualstackSocket::bind(addr, opts, true)?;
 
         debug!(addr=?sock.bind_addr(), requested_addr=?addr, dualstack = sock.is_dualstack(), "listening on UDP");
 

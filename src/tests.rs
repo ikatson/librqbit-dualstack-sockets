@@ -1,3 +1,4 @@
+use crate::BindOpts;
 use crate::TcpListener;
 use crate::UdpSocket;
 
@@ -39,13 +40,27 @@ struct BindSpec {
 
 impl BindSpec {
     fn bind_tcp(&self) -> TcpListener {
-        let res = TcpListener::bind_tcp(self.addr, self.request_dualstack).unwrap();
+        let res = TcpListener::bind_tcp(
+            self.addr,
+            BindOpts {
+                request_dualstack: self.request_dualstack,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(res.is_dualstack(), self.expect_dualstack);
         res
     }
 
     fn bind_udp(&self) -> UdpSocket {
-        let res = UdpSocket::bind_udp(self.addr, self.request_dualstack).unwrap();
+        let res = UdpSocket::bind_udp(
+            self.addr,
+            BindOpts {
+                request_dualstack: self.request_dualstack,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(res.is_dualstack(), self.expect_dualstack);
         res
     }
