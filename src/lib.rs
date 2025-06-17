@@ -12,7 +12,7 @@ pub mod socket;
 
 pub type TcpListener = MaybeDualstackSocket<tokio::net::TcpListener>;
 pub type UdpSocket = MaybeDualstackSocket<tokio::net::UdpSocket>;
-pub use multicast::{MulticastOpts, MulticastUdpSocket};
+pub use multicast::{MulticastOpts, MulticastUdpSocket, SharedMulticastUdpSocket};
 pub use socket::BindOpts;
 
 #[cfg(feature = "axum")]
