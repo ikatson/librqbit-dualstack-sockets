@@ -32,6 +32,14 @@ pub enum Error {
     ReusePort(std::io::Error),
     #[error("error waiting for socket to become writeable")]
     Writeable(std::io::Error),
+    #[error("error calling set_multicast_if_v6")]
+    SetMulticastIpv6(std::io::Error),
+    #[error("error calling set_multicast_if_v4")]
+    SetMulticastIpv4(std::io::Error),
+    #[error("send_multicast_msg called with and Ipv6 addr on an Ipv4 socket")]
+    SendMulticastMsgProtocolMismatch,
+    #[error("error sending: {0:#}")]
+    Send(std::io::Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

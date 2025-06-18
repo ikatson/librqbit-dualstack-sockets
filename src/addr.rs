@@ -41,3 +41,19 @@ impl TryToV4 for SocketAddrV6 {
             .unwrap_or(SocketAddr::V6(*self))
     }
 }
+
+pub trait WithScopeId {
+    fn with_scope_id(&self, scope_id: u32) -> SocketAddrV6;
+
+    fn erase_scope_id(&self) -> SocketAddrV6 {
+        self.with_scope_id(0)
+    }
+}
+
+impl WithScopeId for SocketAddrV6 {
+    fn with_scope_id(&self, scope_id: u32) -> SocketAddrV6 {
+        let mut addr = *self;
+        addr.set_scope_id(scope_id);
+        addr
+    }
+}
