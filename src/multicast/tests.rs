@@ -1,5 +1,5 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     time::Duration,
 };
 
@@ -8,9 +8,21 @@ use tracing::trace;
 
 use crate::MulticastUdpSocket;
 
-const SSDM_MCAST_IPV4: Ipv4Addr = Ipv4Addr::new(239, 255, 255, 250);
-const SSDP_MCAST_IPV6_LINK_LOCAL: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0xc);
-const SSDP_MCAST_IPV6_SITE_LOCAL: Ipv6Addr = Ipv6Addr::new(0xff05, 0, 0, 0, 0, 0, 0, 0xc);
+const SSDP_PORT: u16 = 1900;
+const SSDP_MCAST_IPV4: SocketAddrV4 =
+    SocketAddrV4::new(Ipv4Addr::new(239, 255, 255, 250), SSDP_PORT);
+const SSDP_MCAST_IPV6_LINK_LOCAL: SocketAddrV6 = SocketAddrV6::new(
+    Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0xc),
+    SSDP_PORT,
+    0,
+    0,
+);
+const SSDP_MCAST_IPV6_SITE_LOCAL: SocketAddrV6 = SocketAddrV6::new(
+    Ipv6Addr::new(0xff05, 0, 0, 0, 0, 0, 0, 0xc),
+    SSDP_PORT,
+    0,
+    0,
+);
 
 pub fn setup_test_logging() {
     unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
@@ -24,8 +36,8 @@ pub fn setup_test_logging() {
 async fn multicast_example() {
     setup_test_logging();
     let sock = MulticastUdpSocket::new(
-        10238,
-        SSDM_MCAST_IPV4,
+        (Ipv6Addr::UNSPECIFIED, SSDP_PORT).into(),
+        SSDP_MCAST_IPV4,
         SSDP_MCAST_IPV6_SITE_LOCAL,
         Some(SSDP_MCAST_IPV6_LINK_LOCAL),
     )
