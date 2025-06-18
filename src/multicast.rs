@@ -179,17 +179,16 @@ impl MulticastUdpSocket {
             .iter()
             .flat_map(|ni| ni.addr.iter().map(move |a| (ni.index, a.ip())))
             .filter_map(|(ifidx, ifaddr)| {
-                let ipv6_link_local = self
-                    .ipv6_link_local
-                    .filter(|_| matches!(ifaddr, IpAddr::V6(v6) if ipv6_is_link_local(&v6)));
-                let mcast_addr: SocketAddr = match (bind_is_ipv6, ifaddr, ipv6_link_local) {
+                let mcast_addr: SocketAddr = match (bind_is_ipv6, ifaddr, self.ipv6_link_local) {
                     (_, IpAddr::V4(a), _) if !a.is_loopback() && a.is_private() => {
                         self.ipv4_addr.into()
                     }
-                    (true, IpAddr::V6(a), Some(mlocal)) if !a.is_loopback() => {
+                    (true, IpAddr::V6(a), Some(mlocal))
+                        if !a.is_loopback() && ipv6_is_link_local(&a) =>
+                    {
                         mlocal.with_scope_id(ifidx).into()
                     }
-                    (true, IpAddr::V6(a), None) if !a.is_loopback() => {
+                    (true, IpAddr::V6(a), None) if !a.is_loopback() && !ipv6_is_link_local(&a) => {
                         self.ipv6_site_local.with_scope_id(ifidx).into()
                     }
                     _ => {
