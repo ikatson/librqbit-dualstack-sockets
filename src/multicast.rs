@@ -161,7 +161,7 @@ impl MulticastUdpSocket {
                         if nic.index != addr.scope_id() {
                             return None;
                         }
-                        mlocal.into()
+                        mlocal.with_scope_id(nic.index).into()
                     }
 
                     // For ULAs, multicast to site-local address if in the same netmask
@@ -243,7 +243,9 @@ impl MulticastUdpSocket {
                     {
                         mlocal.with_scope_id(ifidx).into()
                     }
-                    (true, IpAddr::V6(a), None) if !a.is_loopback() && !ipv6_is_link_local(&a) => {
+                    (true, IpAddr::V6(a), _)
+                        if !a.is_loopback() && ipv6_is_unique_local_address(&a) =>
+                    {
                         self.ipv6_site_local.into()
                     }
                     _ => {
@@ -306,7 +308,7 @@ fn ipv6_is_link_local(ip: &Ipv6Addr) -> bool {
 
 fn ipv6_is_unique_local_address(ip: &Ipv6Addr) -> bool {
     const LL: Ipv6Addr = Ipv6Addr::new(0xfc00, 0, 0, 0, 0, 0, 0, 0);
-    const MASK: Ipv6Addr = Ipv6Addr::new(0b11111110, 0, 0, 0, 0, 0, 0, 0);
+    const MASK: Ipv6Addr = Ipv6Addr::new(0b1111111000000000, 0, 0, 0, 0, 0, 0, 0);
 
     ip.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
 }

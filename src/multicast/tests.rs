@@ -1,12 +1,12 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6},
     time::Duration,
 };
 
 use bstr::BStr;
-use tracing::{info, trace};
+use tracing::trace;
 
-use crate::{MulticastUdpSocket, multicast::ipv6_is_link_local};
+use crate::{MulticastUdpSocket, multicast::ipv6_is_unique_local_address};
 
 const SSDP_PORT: u16 = 1900;
 const SSDP_MCAST_IPV4: SocketAddrV4 =
@@ -61,4 +61,15 @@ async fn multicast_example() {
     let send = sock.try_send_mcast_everywhere(&|mopts| format!("{mopts:?}").into());
 
     tokio::join!(recv, send);
+}
+
+#[test]
+fn test_is_ula() {
+    let addr: Ipv6Addr = "fd65:51cb:c099:0:183e:9c41:ed06:235".parse().unwrap();
+    let addr2: Ipv6Addr = "204:6b7e:3cd7:3447:64db:aecf:d9ce:65f".parse().unwrap();
+    assert!(ipv6_is_unique_local_address(&addr));
+    assert!(!ipv6_is_unique_local_address(&addr2));
+
+    let mask: u128 = 0xffffffff00000000;
+    assert!(addr.to_bits() & mask != addr2.to_bits() & mask)
 }
