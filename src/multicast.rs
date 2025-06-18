@@ -2,9 +2,7 @@
 mod tests;
 
 use std::{
-    collections::HashSet,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-    sync::Mutex,
     task::Poll,
 };
 
@@ -174,10 +172,9 @@ impl MulticastUdpSocket {
         &self,
         get_payload: &impl Fn(&MulticastOpts) -> Option<String>,
     ) {
-        let sent = Mutex::new(HashSet::new());
-        let sent = &sent;
+        let bind_is_ipv6 = self.sock.bind_addr().is_ipv6();
 
-        let futs = self
+        let mut send_specs = self
             .nics
             .iter()
             .flat_map(|ni| ni.addr.iter().map(move |a| (ni.index, a.ip())))
@@ -185,14 +182,14 @@ impl MulticastUdpSocket {
                 let ipv6_link_local = self
                     .ipv6_link_local
                     .filter(|_| matches!(ifaddr, IpAddr::V6(v6) if ipv6_is_link_local(&v6)));
-                let mcast_addr: SocketAddr = match (ifaddr, ipv6_link_local) {
-                    (IpAddr::V4(a), _) if !a.is_loopback() && a.is_private() => {
+                let mcast_addr: SocketAddr = match (bind_is_ipv6, ifaddr, ipv6_link_local) {
+                    (_, IpAddr::V4(a), _) if !a.is_loopback() && a.is_private() => {
                         self.ipv4_addr.into()
                     }
-                    (IpAddr::V6(a), Some(mlocal)) if !a.is_loopback() => {
+                    (true, IpAddr::V6(a), Some(mlocal)) if !a.is_loopback() => {
                         mlocal.with_scope_id(ifidx).into()
                     }
-                    (IpAddr::V6(a), None) if !a.is_loopback() => {
+                    (true, IpAddr::V6(a), None) if !a.is_loopback() => {
                         self.ipv6_site_local.with_scope_id(ifidx).into()
                     }
                     _ => {
@@ -206,27 +203,23 @@ impl MulticastUdpSocket {
                     mcast_addr,
                 })
             })
-            .filter_map(|opts| {
-                let payload = get_payload(&opts)?;
-                let fut = async move {
-                    if !sent
-                        .lock()
-                        .unwrap()
-                        .insert((payload.clone(), opts.uniq_key()))
-                    {
-                        trace!(?opts, "not sending duplicate payload");
-                        return;
-                    }
+            .collect::<Vec<_>>();
 
-                    match self.send_multicast_msg(payload.as_bytes(), &opts).await {
-                        Ok(sz) => trace!(?opts, size=sz, payload=?payload, "sent"),
-                        Err(e) => {
-                            debug!(?opts, payload=?payload, "error sending: {e:#}")
-                        }
-                    };
+        send_specs.sort_by_key(|s| s.uniq_key(bind_is_ipv6));
+        send_specs.dedup_by_key(|s| s.uniq_key(bind_is_ipv6));
+
+        let futs = send_specs.into_iter().filter_map(|opts| {
+            let payload = get_payload(&opts)?;
+            let fut = async move {
+                match self.send_multicast_msg(payload.as_bytes(), &opts).await {
+                    Ok(sz) => trace!(?opts, size=sz, payload=?payload, "sent"),
+                    Err(e) => {
+                        debug!(?opts, payload=?payload, "error sending: {e:#}")
+                    }
                 };
-                Some(fut)
-            });
+            };
+            Some(fut)
+        });
 
         futures::future::join_all(futs).await;
     }
@@ -287,7 +280,11 @@ impl MulticastOpts {
         self.mcast_addr
     }
 
-    fn uniq_key(&self) -> (Option<u32>, Option<Ipv4Addr>, SocketAddr) {
-        todo!()
+    fn uniq_key(&self, bind_addr_is_ipv6: bool) -> (Option<u32>, Option<IpAddr>, SocketAddr) {
+        if bind_addr_is_ipv6 {
+            (Some(self.interface_id), None, self.mcast_addr)
+        } else {
+            (None, Some(self.interface_addr), self.mcast_addr)
+        }
     }
 }

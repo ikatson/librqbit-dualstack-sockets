@@ -1,5 +1,5 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6},
     time::Duration,
 };
 
