@@ -1,12 +1,12 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     time::Duration,
 };
 
 use bstr::BStr;
-use tracing::trace;
+use tracing::{info, trace};
 
-use crate::MulticastUdpSocket;
+use crate::{MulticastUdpSocket, multicast::ipv6_is_link_local};
 
 const SSDP_PORT: u16 = 1900;
 const SSDP_MCAST_IPV4: SocketAddrV4 =
@@ -49,7 +49,8 @@ async fn multicast_example() {
         while let Ok(()) = tokio::time::timeout(Duration::from_millis(100), async {
             let (payload, addr) = sock.recv_from(&mut buf).await.unwrap();
             let payload = BStr::new(&buf[..payload]);
-            println!("received from {addr:?}: {payload}");
+            let reply_opts = sock.find_mcast_opts_for_replying_to(&addr);
+            println!("received from {addr:?}; reply_opts={reply_opts:?}, payload={payload:?}");
         })
         .await
         {}

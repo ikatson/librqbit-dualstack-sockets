@@ -69,7 +69,20 @@ impl MulticastUdpSocket {
     }
 
     pub async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> std::io::Result<usize> {
-        self.sock.send_to(buf, addr).await
+        // Ensure the multicast option is erased before sending
+        std::future::poll_fn(|cx| {
+            let sref = SockRef::from(self.sock.socket());
+            if self.sock.bind_addr().is_ipv6() {
+                if let Err(e) = sref.set_multicast_if_v6(0) {
+                    trace!("error calling set_multicast_if_v6(0): {e:#}")
+                }
+            } else if let Err(e) = sref.set_multicast_if_v4(&Ipv4Addr::UNSPECIFIED) {
+                trace!("error calling set_multicast_if_v4(0.0.0.0): {e:#}")
+            }
+
+            self.sock.poll_send_to(cx, buf, addr)
+        })
+        .await
     }
 
     async fn bind_multicast(&self) -> crate::Result<()> {
@@ -135,6 +148,48 @@ impl MulticastUdpSocket {
         Ok(())
     }
 
+    pub fn find_mcast_opts_for_replying_to(&self, addr: &SocketAddr) -> Option<MulticastOpts> {
+        self.nics()
+            .iter()
+            .flat_map(|nic| nic.addr.iter().map(move |addr| (nic, addr)))
+            .find_map(|(nic, naddr)| {
+                let nm = naddr.netmask();
+                let mcast_addr: SocketAddr = match (addr, naddr.ip(), nm, self.ipv6_link_local) {
+                    // For link-local addresses, we reply back to the nic from scope_id, if there's a multicast link-local
+                    // address
+                    (SocketAddr::V6(addr), _, _, Some(mlocal)) if ipv6_is_link_local(addr.ip()) => {
+                        if nic.index != addr.scope_id() {
+                            return None;
+                        }
+                        mlocal.into()
+                    }
+
+                    // For ULAs, multicast to site-local address if in the same netmask
+                    (SocketAddr::V6(addr), IpAddr::V6(naddr), Some(IpAddr::V6(mask)), _)
+                        if ipv6_is_unique_local_address(addr.ip())
+                            && addr.ip().to_bits() & mask.to_bits()
+                                == naddr.to_bits() & mask.to_bits() =>
+                    {
+                        self.ipv6_site_local.into()
+                    }
+
+                    // For IPv4, if the mask matches, determine the interface.
+                    (SocketAddr::V4(addr), IpAddr::V4(naddr), Some(IpAddr::V4(mask)), _)
+                        if addr.ip().to_bits() & mask.to_bits()
+                            == naddr.to_bits() & mask.to_bits() =>
+                    {
+                        self.ipv4_addr.into()
+                    }
+                    _ => return None,
+                };
+                Some(MulticastOpts {
+                    interface_id: nic.index,
+                    interface_addr: naddr.ip(),
+                    mcast_addr,
+                })
+            })
+    }
+
     pub async fn send_multicast_msg(
         &self,
         buf: &[u8],
@@ -189,7 +244,7 @@ impl MulticastUdpSocket {
                         mlocal.with_scope_id(ifidx).into()
                     }
                     (true, IpAddr::V6(a), None) if !a.is_loopback() && !ipv6_is_link_local(&a) => {
-                        self.ipv6_site_local.with_scope_id(ifidx).into()
+                        self.ipv6_site_local.into()
                     }
                     _ => {
                         trace!(oif_id=ifidx, addr=%ifaddr, "ignoring address");
@@ -245,6 +300,13 @@ fn try_join_v6(sock: &UdpSocket, addr: Ipv6Addr, ifindex: u32) -> bool {
 fn ipv6_is_link_local(ip: &Ipv6Addr) -> bool {
     const LL: Ipv6Addr = Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 0);
     const MASK: Ipv6Addr = Ipv6Addr::new(0xffff, 0xffff, 0xffff, 0xffff, 0, 0, 0, 0);
+
+    ip.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
+}
+
+fn ipv6_is_unique_local_address(ip: &Ipv6Addr) -> bool {
+    const LL: Ipv6Addr = Ipv6Addr::new(0xfc00, 0, 0, 0, 0, 0, 0, 0);
+    const MASK: Ipv6Addr = Ipv6Addr::new(0b11111110, 0, 0, 0, 0, 0, 0, 0);
 
     ip.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
 }
