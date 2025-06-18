@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, SocketAddrV6};
+use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 
 pub trait TryToV4 {
     fn try_to_ipv4(&self) -> SocketAddr;
@@ -55,5 +55,42 @@ impl WithScopeId for SocketAddrV6 {
         let mut addr = *self;
         addr.set_scope_id(scope_id);
         addr
+    }
+}
+
+pub trait Ipv6AddrExt {
+    fn is_link_local(&self) -> bool;
+    fn is_unique_local_address(&self) -> bool;
+    fn is_link_local_mcast(&self) -> bool;
+    fn is_site_local_mcast(&self) -> bool;
+}
+
+impl Ipv6AddrExt for Ipv6Addr {
+    fn is_link_local(&self) -> bool {
+        const LL: Ipv6Addr = Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 0);
+        const MASK: Ipv6Addr = Ipv6Addr::new(0xffff, 0xffff, 0xffff, 0xffff, 0, 0, 0, 0);
+
+        self.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
+    }
+
+    fn is_unique_local_address(&self) -> bool {
+        const LL: Ipv6Addr = Ipv6Addr::new(0xfc00, 0, 0, 0, 0, 0, 0, 0);
+        const MASK: Ipv6Addr = Ipv6Addr::new(0b1111111000000000, 0, 0, 0, 0, 0, 0, 0);
+
+        self.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
+    }
+
+    fn is_link_local_mcast(&self) -> bool {
+        const LL: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0);
+        const MASK: Ipv6Addr = Ipv6Addr::new(0xff0f, 0xffff, 0xffff, 0xffff, 0, 0, 0, 0);
+
+        self.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
+    }
+
+    fn is_site_local_mcast(&self) -> bool {
+        const LL: Ipv6Addr = Ipv6Addr::new(0xff05, 0, 0, 0, 0, 0, 0, 0);
+        const MASK: Ipv6Addr = Ipv6Addr::new(0xff0f, 0xffff, 0xffff, 0xffff, 0, 0, 0, 0);
+
+        self.to_bits() & MASK.to_bits() == LL.to_bits() & MASK.to_bits()
     }
 }
