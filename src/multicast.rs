@@ -117,7 +117,7 @@ impl MulticastUdpSocket {
                         if addr.is_loopback() {
                             continue;
                         }
-                        if addr.is_link_local() {
+                        if addr.is_unicast_link_local() {
                             has_link_local = true;
                         } else {
                             has_site_local = true;
@@ -160,7 +160,9 @@ impl MulticastUdpSocket {
                 let mcast_addr: SocketAddr = match (addr, naddr.ip(), nm, self.ipv6_link_local) {
                     // For link-local addresses, we reply back to the nic from scope_id, if there's a multicast link-local
                     // address
-                    (SocketAddr::V6(addr), _, _, Some(mlocal)) if addr.ip().is_link_local() => {
+                    (SocketAddr::V6(addr), _, _, Some(mlocal))
+                        if addr.ip().is_unicast_link_local() =>
+                    {
                         if nic.index != addr.scope_id() {
                             return None;
                         }
@@ -169,7 +171,7 @@ impl MulticastUdpSocket {
 
                     // For ULAs, multicast to site-local address if in the same netmask
                     (SocketAddr::V6(addr), IpAddr::V6(naddr), Some(IpAddr::V6(mask)), _)
-                        if addr.ip().is_unique_local_address()
+                        if addr.ip().is_unique_local()
                             && addr.ip().to_bits() & mask.to_bits()
                                 == naddr.to_bits() & mask.to_bits() =>
                     {
@@ -242,11 +244,11 @@ impl MulticastUdpSocket {
                         self.ipv4_addr.into()
                     }
                     (true, IpAddr::V6(a), Some(mlocal))
-                        if !a.is_loopback() && a.is_link_local() =>
+                        if !a.is_loopback() && a.is_unicast_link_local() =>
                     {
                         mlocal.with_scope_id(ifidx).into()
                     }
-                    (true, IpAddr::V6(a), _) if !a.is_loopback() && a.is_unique_local_address() => {
+                    (true, IpAddr::V6(a), _) if !a.is_loopback() && a.is_unique_local() => {
                         self.ipv6_site_local.into()
                     }
                     _ => {

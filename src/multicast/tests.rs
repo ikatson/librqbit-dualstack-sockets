@@ -6,7 +6,7 @@ use std::{
 use bstr::BStr;
 use tracing::trace;
 
-use crate::{MulticastUdpSocket, addr::Ipv6AddrExt};
+use crate::MulticastUdpSocket;
 
 const SSDP_PORT: u16 = 1900;
 const SSDP_MCAST_IPV4: SocketAddrV4 =
@@ -67,8 +67,8 @@ async fn multicast_example() {
 fn test_is_ula() {
     let addr: Ipv6Addr = "fd65:51cb:c099:0:183e:9c41:ed06:235".parse().unwrap();
     let addr2: Ipv6Addr = "204:6b7e:3cd7:3447:64db:aecf:d9ce:65f".parse().unwrap();
-    assert!(addr.is_unique_local_address());
-    assert!(!addr2.is_unique_local_address());
+    assert!(addr.is_unique_local());
+    assert!(!addr2.is_unique_local());
 
     let mask: u128 = 0xffffffff00000000;
     assert!(addr.to_bits() & mask != addr2.to_bits() & mask)
