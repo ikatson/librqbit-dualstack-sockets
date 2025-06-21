@@ -2,6 +2,7 @@
 mod tests;
 
 use std::{
+    future::poll_fn,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     task::Poll,
 };
@@ -73,7 +74,7 @@ impl MulticastUdpSocket {
 
     pub async fn send_to(&self, buf: &[u8], addr: SocketAddr) -> std::io::Result<usize> {
         // Ensure the multicast option is erased before sending
-        std::future::poll_fn(|cx| {
+        poll_fn(|cx| {
             let sref = SockRef::from(self.sock.socket());
             if self.sock.bind_addr().is_ipv6() {
                 if let Err(e) = sref.set_multicast_if_v6(0) {
@@ -201,26 +202,29 @@ impl MulticastUdpSocket {
         buf: &[u8],
         opts: &MulticastOpts,
     ) -> crate::Result<usize> {
-        // This is .poll_fn() so that we call .set_multicast() immediately before sending a packet.
+        // This is .poll_fn() so that we call .set_multicast_if_*() immediately before sending a packet.
         // If it's repolled it'll get called again just before the send.
-
-        std::future::poll_fn(|cx| {
+        poll_fn(|cx| {
             let sref = SockRef::from(self.sock.socket());
-            if self.sock.bind_addr().is_ipv6() {
-                if let Err(e) = sref.set_multicast_if_v6(opts.interface_id) {
-                    return Poll::Ready(Err(Error::SetMulticastIpv6(e)));
+            let bind_is_ipv6 = self.sock.bind_addr().is_ipv6();
+            let is_linux = cfg!(target_os = "linux");
+
+            // send ipv4 if either (is_linux && target=ipv4) or (!is_linux && bind_addr=ipv4)
+
+            match (opts.mcast_addr(), opts.iface_ip(), bind_is_ipv6, is_linux) {
+                // on linux, v4 multicast messages are sent with IP_MULTICAST_IF
+                // on other platforms' dualstack sockets they are sent with IPV6_MULTICAST_IF
+                (SocketAddr::V4(_), IpAddr::V4(addr), _, true)
+                | (SocketAddr::V4(_), IpAddr::V4(addr), false, false) => {
+                    sref.set_multicast_if_v4(&addr)
+                        .map_err(Error::SetMulticastIpv4)?;
                 }
-            } else {
-                let ifaddr = match opts.interface_addr {
-                    IpAddr::V4(ipv4_addr) => ipv4_addr,
-                    IpAddr::V6(_) => {
-                        return Poll::Ready(Err(Error::SendMulticastMsgProtocolMismatch));
-                    }
-                };
-                if let Err(e) = sref.set_multicast_if_v4(&ifaddr) {
-                    return Poll::Ready(Err(Error::SetMulticastIpv4(e)));
+                (SocketAddr::V6(_), IpAddr::V6(_), _, _) => {
+                    sref.set_multicast_if_v6(opts.interface_id)
+                        .map_err(Error::SetMulticastIpv6)?;
                 }
-            };
+                _ => return Poll::Ready(Err(Error::SendMulticastMsgProtocolMismatch)),
+            }
 
             self.sock
                 .poll_send_to(cx, buf, opts.mcast_addr)

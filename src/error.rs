@@ -36,7 +36,7 @@ pub enum Error {
     SetMulticastIpv6(std::io::Error),
     #[error("error calling set_multicast_if_v4")]
     SetMulticastIpv4(std::io::Error),
-    #[error("send_multicast_msg called with and Ipv6 addr on an Ipv4 socket")]
+    #[error("send_multicast_msg called with conflicting parameters")]
     SendMulticastMsgProtocolMismatch,
     #[error("error sending: {0:#}")]
     Send(std::io::Error),
