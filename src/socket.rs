@@ -137,6 +137,13 @@ impl MaybeDualstackSocket<Socket> {
                 .map_err(Error::ReuseAddress)?;
         }
 
+        #[cfg(windows)]
+        if opts.reuseport {
+            socket
+                .set_reuse_address(true)
+                .map_err(Error::ReuseAddress)?;
+        }
+
         #[cfg(not(windows))]
         if opts.reuseport {
             socket.set_reuse_port(true).map_err(Error::ReusePort)?;
