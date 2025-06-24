@@ -4,6 +4,7 @@ use std::{
 };
 
 use bstr::BStr;
+use tokio::time::timeout;
 use tracing::trace;
 
 use crate::MulticastUdpSocket;
@@ -72,4 +73,35 @@ fn test_is_ula() {
 
     let mask: u128 = 0xffffffff00000000;
     assert!(addr.to_bits() & mask != addr2.to_bits() & mask)
+}
+
+#[tokio::test]
+async fn test_v4_received() {
+    setup_test_logging();
+    let sock = MulticastUdpSocket::new(
+        (Ipv6Addr::UNSPECIFIED, SSDP_PORT).into(),
+        SSDP_MCAST_IPV4,
+        SSDP_MCAST_IPV6_SITE_LOCAL,
+        Some(SSDP_MCAST_IPV6_LINK_LOCAL),
+    )
+    .await
+    .unwrap();
+
+    sock.try_send_mcast_everywhere(&|opts| {
+        if opts.iface_ip().is_ipv4() {
+            Some("hello".into())
+        } else {
+            None
+        }
+    })
+    .await;
+
+    let mut buf = [0u8; 5];
+    let (sz, addr) = timeout(Duration::from_millis(100), sock.recv_from(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(sz, 5);
+    assert!(addr.is_ipv4());
+    assert_eq!(&buf, b"hello");
 }
