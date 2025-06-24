@@ -138,7 +138,7 @@ impl MaybeDualstackSocket<Socket> {
         }
 
         #[cfg(windows)]
-        if opts.reuseport {
+        if opts.reuseport || !is_udp {
             socket
                 .set_reuse_address(true)
                 .map_err(Error::ReuseAddress)?;
