@@ -115,3 +115,46 @@ async fn test_v6_received() {
     assert!(addr.is_ipv6(), "{addr:?} expected v6");
     assert_eq!(&buf, b"hello");
 }
+
+#[tokio::test]
+async fn bind_multiple_same_port() {
+    setup_test_logging();
+    let sock1 = bind_mcast_sock(1904).await;
+    let sock2 = bind_mcast_sock(1904).await;
+
+    sock1
+        .try_send_mcast_everywhere(&|opts| {
+            if opts.iface_ip().is_ipv4() {
+                Some("hello".into())
+            } else {
+                None
+            }
+        })
+        .await;
+    sock2
+        .try_send_mcast_everywhere(&|opts| {
+            if opts.iface_ip().is_ipv4() {
+                Some("hello".into())
+            } else {
+                None
+            }
+        })
+        .await;
+
+    let mut buf = [0u8; 5];
+    let (sz, addr) = timeout(Duration::from_millis(100), sock1.recv_from(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(sz, 5);
+    assert!(addr.is_ipv4(), "{addr:?} expected v4");
+    assert_eq!(&buf, b"hello");
+
+    let (sz, addr) = timeout(Duration::from_millis(100), sock2.recv_from(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(sz, 5);
+    assert!(addr.is_ipv4(), "{addr:?} expected v4");
+    assert_eq!(&buf, b"hello");
+}
