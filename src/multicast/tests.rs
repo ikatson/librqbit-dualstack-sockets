@@ -9,21 +9,21 @@ use tracing::trace;
 
 use crate::MulticastUdpSocket;
 
-const SSDP_PORT: u16 = 1900;
-const SSDP_MCAST_IPV4: SocketAddrV4 =
-    SocketAddrV4::new(Ipv4Addr::new(239, 255, 255, 250), SSDP_PORT);
-const SSDP_MCAST_IPV6_LINK_LOCAL: SocketAddrV6 = SocketAddrV6::new(
-    Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0xc),
-    SSDP_PORT,
-    0,
-    0,
-);
-const SSDP_MCAST_IPV6_SITE_LOCAL: SocketAddrV6 = SocketAddrV6::new(
-    Ipv6Addr::new(0xff05, 0, 0, 0, 0, 0, 0, 0xc),
-    SSDP_PORT,
-    0,
-    0,
-);
+async fn bind_mcast_sock(port: u16) -> MulticastUdpSocket {
+    MulticastUdpSocket::new(
+        (Ipv6Addr::UNSPECIFIED, port).into(),
+        SocketAddrV4::new(Ipv4Addr::new(239, 255, 255, 250), port),
+        SocketAddrV6::new(Ipv6Addr::new(0xff05, 0, 0, 0, 0, 0, 0, 0xc), port, 0, 0),
+        Some(SocketAddrV6::new(
+            Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0xc),
+            port,
+            0,
+            0,
+        )),
+    )
+    .await
+    .unwrap()
+}
 
 pub fn setup_test_logging() {
     unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
@@ -36,14 +36,7 @@ pub fn setup_test_logging() {
 #[tokio::test]
 async fn multicast_example() {
     setup_test_logging();
-    let sock = MulticastUdpSocket::new(
-        (Ipv6Addr::UNSPECIFIED, SSDP_PORT).into(),
-        SSDP_MCAST_IPV4,
-        SSDP_MCAST_IPV6_SITE_LOCAL,
-        Some(SSDP_MCAST_IPV6_LINK_LOCAL),
-    )
-    .await
-    .unwrap();
+    let sock = bind_mcast_sock(1901).await;
 
     let recv = async {
         let mut buf = [0u8; 256];
@@ -78,14 +71,7 @@ fn test_is_ula() {
 #[tokio::test]
 async fn test_v4_received() {
     setup_test_logging();
-    let sock = MulticastUdpSocket::new(
-        (Ipv6Addr::UNSPECIFIED, SSDP_PORT).into(),
-        SSDP_MCAST_IPV4,
-        SSDP_MCAST_IPV6_SITE_LOCAL,
-        Some(SSDP_MCAST_IPV6_LINK_LOCAL),
-    )
-    .await
-    .unwrap();
+    let sock = bind_mcast_sock(1902).await;
 
     sock.try_send_mcast_everywhere(&|opts| {
         if opts.iface_ip().is_ipv4() {
