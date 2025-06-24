@@ -104,8 +104,9 @@ impl MulticastUdpSocket {
                     (IpAddr::V4(iface_addr), is_ipv6)
                         if iface_addr.is_private() && !iface_addr.is_loopback() =>
                     {
-                        let is_linux = cfg!(target_os = "linux");
-                        if !is_ipv6 || is_linux {
+                        let is_linux_or_windows =
+                            cfg!(any(target_os = "linux", target_os = "windows"));
+                        if !is_ipv6 || is_linux_or_windows {
                             joined |= try_join_v4(&self.sock, *self.ipv4_addr.ip(), iface_addr);
                         } else {
                             joined |= try_join_v6(
