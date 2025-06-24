@@ -219,7 +219,8 @@ impl MulticastUdpSocket {
                     sref.set_multicast_if_v4(&addr)
                         .map_err(Error::SetMulticastIpv4)?;
                 }
-                (SocketAddr::V6(_), IpAddr::V6(_), _, _) => {
+                (SocketAddr::V6(_), IpAddr::V6(_), _, _)
+                | (SocketAddr::V4(_), IpAddr::V4(_), _, _) => {
                     sref.set_multicast_if_v6(opts.interface_id)
                         .map_err(Error::SetMulticastIpv6)?;
                 }

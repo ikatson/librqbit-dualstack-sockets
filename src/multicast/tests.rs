@@ -102,6 +102,6 @@ async fn test_v4_received() {
         .unwrap()
         .unwrap();
     assert_eq!(sz, 5);
-    assert!(addr.is_ipv4());
+    assert!(addr.is_ipv4(), "{addr:?} expected v4");
     assert_eq!(&buf, b"hello");
 }
