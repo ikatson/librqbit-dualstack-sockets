@@ -68,7 +68,7 @@ impl<S> MaybeDualstackSocket<S> {
         )
     }
 
-    fn convert_addr_for_send(&self, addr: SocketAddr) -> SocketAddr {
+    pub(crate) fn convert_addr_for_send(&self, addr: SocketAddr) -> SocketAddr {
         if self.is_dualstack() {
             return SocketAddr::V6(addr.to_ipv6_mapped());
         }
