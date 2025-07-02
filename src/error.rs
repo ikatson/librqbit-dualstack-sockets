@@ -40,6 +40,16 @@ pub enum Error {
     SendMulticastMsgProtocolMismatch,
     #[error("error sending: {0:#}")]
     Send(std::io::Error),
+    #[error("binding to device is not supported on your OS")]
+    BindDeviceNotSupported,
+    #[error("invalid bind device")]
+    BindDeviceInvalid,
+    #[error("invalid bind device: {0:#}")]
+    BindDeviceInvalidError(std::io::Error),
+    #[error("error setting bind device: {0:#}")]
+    BindDeviceSetDeviceError(std::io::Error),
+    #[error("error connecting: {0:#}")]
+    Connect(std::io::Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;

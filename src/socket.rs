@@ -9,6 +9,7 @@ use tracing::{debug, trace};
 use crate::{
     Error,
     addr::{ToV6Mapped, TryToV4},
+    bind_device::BindDevice,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -21,6 +22,10 @@ pub enum SocketAddrKind {
 }
 
 impl SocketAddrKind {
+    fn is_v6(&self) -> bool {
+        matches!(self, SocketAddrKind::V6 { .. })
+    }
+
     fn as_socketaddr(&self) -> SocketAddr {
         match *self {
             SocketAddrKind::V4(addr) => SocketAddr::V4(addr),
@@ -30,16 +35,18 @@ impl SocketAddrKind {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct BindOpts {
+pub struct BindOpts<'a> {
     pub request_dualstack: bool,
     pub reuseport: bool,
+    pub device: Option<&'a BindDevice>,
 }
 
-impl Default for BindOpts {
+impl Default for BindOpts<'_> {
     fn default() -> Self {
         Self {
             request_dualstack: true,
             reuseport: false,
+            device: None,
         }
     }
 }
@@ -149,6 +156,10 @@ impl MaybeDualstackSocket<Socket> {
             socket.set_reuse_port(true).map_err(Error::ReusePort)?;
             debug!(reuse_port=?socket.reuse_port());
             debug!(reuse_addr=?socket.reuse_address());
+        }
+
+        if let Some(bd) = opts.device {
+            bd.bind_sref(&socket, addr_kind.is_v6())?;
         }
 
         socket.bind(&addr.into()).map_err(|e| {

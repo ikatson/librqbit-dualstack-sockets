@@ -51,6 +51,7 @@ impl MulticastUdpSocket {
         let opts = BindOpts {
             request_dualstack: true,
             reuseport: true,
+            device: None,
         };
         let sock = UdpSocket::bind_udp(bind_addr, opts)?;
         let sock = Self {
