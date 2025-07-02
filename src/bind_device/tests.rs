@@ -15,6 +15,7 @@ fn find_localhost_name() -> String {
 
 const TIMEOUT: Duration = Duration::from_secs(1);
 
+#[cfg(not(windows))]
 #[tokio::test]
 async fn test_bind_to_device() {
     let bd_name = find_localhost_name();
@@ -41,13 +42,29 @@ async fn test_bind_to_device() {
             },
         ),
     )
-    .await
-    .expect("unexpected timeout");
+    .await;
 
+    #[cfg(target_os = "macos")]
     match &res {
-        Ok(_) => panic!("expected an error"),
-        Err(e) => {
+        Ok(Ok(_)) => panic!("expected an error"),
+        Ok(Err(e)) => {
             println!("error: {e:#}");
+        }
+        Err(_) => {
+            panic!("unexpected timeout")
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    match &res {
+        Ok(Ok(_)) => panic!("expected an error"),
+        Ok(Err(e)) => {
+            println!("error: {e:#}");
+        }
+        Err(_) => {
+            println!(
+                "timeout, this is expected on linux, as SO_BINDTODEVICE would route the packet via lo"
+            )
         }
     }
 }

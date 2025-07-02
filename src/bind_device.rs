@@ -40,14 +40,14 @@ impl BindDevice {
     }
 
     #[cfg(not(any(target_os = "macos", windows)))]
-    pub fn bind_sref(&self, sref: &socket2::Socket, is_v6: bool) -> crate::Result<()> {
+    pub fn bind_sref(&self, sref: &socket2::Socket, _is_v6: bool) -> crate::Result<()> {
         let name = self.name.as_bytes();
         sref.bind_device(Some(name))
             .map_err(Error::BindDeviceSetDeviceError)
     }
 
     #[cfg(windows)]
-    pub fn bind_sref(&self, sref: &socket2::Socket, is_v6: bool) -> crate::Result<()> {
+    pub fn bind_sref(&self, _sref: &socket2::Socket, _is_v6: bool) -> crate::Result<()> {
         Err(Error::BindDeviceNotSupported)
     }
 }
