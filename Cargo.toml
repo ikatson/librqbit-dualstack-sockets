@@ -21,6 +21,7 @@ tokio = { version = "1.45.1", features = ["net"] }
 tracing = "0.1.41"
 network-interface = { version = "2" }
 futures = "0.3.31"
+libc = "0.2.174"
 
 [dev-dependencies]
 anyhow = "1"
