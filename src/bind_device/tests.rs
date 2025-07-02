@@ -1,6 +1,7 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+use tokio::time::timeout;
 
 use crate::{BindDevice, ConnectOpts, tcp_connect};
 
@@ -12,6 +13,8 @@ fn find_localhost_name() -> String {
         .expect("expected to find loopback interface")
 }
 
+const TIMEOUT: Duration = Duration::from_secs(1);
+
 #[tokio::test]
 async fn test_bind_to_device() {
     let bd_name = find_localhost_name();
@@ -20,19 +23,26 @@ async fn test_bind_to_device() {
     println!("bd: {bd:?}");
     let test_addr: SocketAddr = "1.1.1.1:80".parse().unwrap();
     drop(
-        tcp_connect(test_addr, ConnectOpts::default())
+        timeout(TIMEOUT, tcp_connect(test_addr, ConnectOpts::default()))
             .await
+            .expect("unexpected timeout")
             .expect("expected to connect without BD"),
     );
 
-    let res = tcp_connect(
-        test_addr,
-        ConnectOpts {
-            bind_device: Some(&bd),
-            ..Default::default()
-        },
+    println!("connected successfully. now will try with bind_device");
+
+    let res = timeout(
+        TIMEOUT,
+        tcp_connect(
+            test_addr,
+            ConnectOpts {
+                bind_device: Some(&bd),
+                ..Default::default()
+            },
+        ),
     )
-    .await;
+    .await
+    .expect("unexpected timeout");
 
     match &res {
         Ok(_) => panic!("expected an error"),
