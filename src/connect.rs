@@ -4,7 +4,7 @@ use socket2::SockRef;
 
 use crate::{Error, bind_device::BindDevice};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ConnectOpts<'a> {
     pub source_port: Option<u16>,
     pub bind_device: Option<&'a BindDevice>,

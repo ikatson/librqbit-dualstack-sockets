@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::Error;
 use std::{ffi::CString, num::NonZeroU32, str::FromStr};
 
