@@ -4,7 +4,7 @@ mod tests;
 use crate::Error;
 use std::{ffi::CString, num::NonZeroU32, str::FromStr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BindDevice {
     #[allow(unused)]
     index: NonZeroU32,
