@@ -105,7 +105,7 @@ impl MulticastUdpSocket {
             for addr in nic.addr.iter() {
                 match (addr.ip(), self.sock.bind_addr().is_ipv6()) {
                     (IpAddr::V4(iface_addr), is_ipv6)
-                        if iface_addr.is_private() && !iface_addr.is_loopback() =>
+                        if iface_addr.is_private() || iface_addr.is_loopback() =>
                     {
                         let is_linux_or_windows =
                             cfg!(any(target_os = "linux", target_os = "windows"));
@@ -120,9 +120,6 @@ impl MulticastUdpSocket {
                         }
                     }
                     (IpAddr::V6(addr), true) => {
-                        if addr.is_loopback() {
-                            continue;
-                        }
                         if addr.is_unicast_link_local() {
                             has_link_local = true;
                         } else {
@@ -250,17 +247,13 @@ impl MulticastUdpSocket {
             .flat_map(|ni| ni.addr.iter().map(move |a| (ni.index, a.ip())))
             .filter_map(|(ifidx, ifaddr)| {
                 let mcast_addr: SocketAddr = match (bind_is_ipv6, ifaddr, self.ipv6_link_local) {
-                    (_, IpAddr::V4(a), _) if !a.is_loopback() && a.is_private() => {
+                    (_, IpAddr::V4(a), _) if a.is_private() || a.is_loopback() => {
                         self.ipv4_addr.into()
                     }
-                    (true, IpAddr::V6(a), Some(mlocal))
-                        if !a.is_loopback() && a.is_unicast_link_local() =>
-                    {
+                    (true, IpAddr::V6(a), Some(mlocal)) if a.is_unicast_link_local() => {
                         mlocal.with_scope_id(ifidx).into()
                     }
-                    (true, IpAddr::V6(a), _) if !a.is_loopback() && a.is_unique_local() => {
-                        self.ipv6_site_local.into()
-                    }
+                    (true, IpAddr::V6(a), _) if a.is_unique_local() => self.ipv6_site_local.into(),
                     _ => {
                         trace!(oif_id=ifidx, addr=%ifaddr, "ignoring address");
                         return None;

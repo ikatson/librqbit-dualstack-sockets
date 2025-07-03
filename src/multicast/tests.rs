@@ -172,21 +172,15 @@ async fn test_mcast_bind_device() {
 
     let sock = bind_mcast_sock(1905, Some(&lo)).await;
 
-    sock.try_send_mcast_everywhere(&|opts| {
-        if opts.iface_ip().is_ipv6() {
-            Some("hello".into())
-        } else {
-            None
-        }
-    })
-    .await;
+    sock.try_send_mcast_everywhere(&|_| Some("hello".into()))
+        .await;
 
     let mut buf = [0u8; 5];
     let (sz, addr) = timeout(Duration::from_millis(100), sock.recv_from(&mut buf))
         .await
         .unwrap()
         .unwrap();
+    trace!(?addr, sz, "received");
     assert_eq!(sz, 5);
-    assert!(addr.is_ipv6(), "{addr:?} expected v6");
     assert_eq!(&buf, b"hello");
 }
