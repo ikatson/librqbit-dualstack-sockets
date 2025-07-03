@@ -12,7 +12,7 @@ use socket2::SockRef;
 use tracing::{debug, trace};
 
 use crate::{
-    BindOpts, Error, UdpSocket,
+    BindDevice, BindOpts, Error, UdpSocket,
     addr::{Ipv6AddrExt, WithScopeId},
 };
 
@@ -32,6 +32,7 @@ impl MulticastUdpSocket {
         ipv4_mcast_addr: SocketAddrV4,
         ipv6_site_local_addr: SocketAddrV6,
         ipv6_link_local_addr: Option<SocketAddrV6>,
+        bind_device: Option<&BindDevice>,
     ) -> crate::Result<Self> {
         if let Some(ll) = ipv6_link_local_addr {
             if !ll.ip().is_link_local_mcast() {
@@ -44,6 +45,7 @@ impl MulticastUdpSocket {
         let nics = network_interface::NetworkInterface::show()
             .into_iter()
             .flatten()
+            .filter(|nic| bind_device.is_none_or(|bd| bd.index().get() == nic.index))
             .collect::<Vec<_>>();
         if nics.is_empty() {
             return Err(Error::NoNics);
@@ -51,7 +53,7 @@ impl MulticastUdpSocket {
         let opts = BindOpts {
             request_dualstack: true,
             reuseport: true,
-            device: None,
+            device: bind_device,
         };
         let sock = UdpSocket::bind_udp(bind_addr, opts)?;
         let sock = Self {

@@ -7,9 +7,10 @@ use bstr::BStr;
 use tokio::time::timeout;
 use tracing::trace;
 
-use crate::MulticastUdpSocket;
+use crate::{BindDevice, MulticastUdpSocket};
 
-async fn bind_mcast_sock(port: u16) -> MulticastUdpSocket {
+async fn bind_mcast_sock(port: u16, bd_name: Option<&str>) -> MulticastUdpSocket {
+    let bd = bd_name.map(|name| BindDevice::new_from_name(name).unwrap());
     MulticastUdpSocket::new(
         (Ipv6Addr::UNSPECIFIED, port).into(),
         SocketAddrV4::new(Ipv4Addr::new(239, 255, 255, 250), port),
@@ -20,6 +21,7 @@ async fn bind_mcast_sock(port: u16) -> MulticastUdpSocket {
             0,
             0,
         )),
+        bd.as_ref(),
     )
     .await
     .unwrap()
@@ -36,7 +38,7 @@ pub fn setup_test_logging() {
 #[tokio::test]
 async fn multicast_example() {
     setup_test_logging();
-    let sock = bind_mcast_sock(1901).await;
+    let sock = bind_mcast_sock(1901, None).await;
 
     let recv = async {
         let mut buf = [0u8; 256];
@@ -71,7 +73,7 @@ fn test_is_ula() {
 #[tokio::test]
 async fn test_v4_received() {
     setup_test_logging();
-    let sock = bind_mcast_sock(1902).await;
+    let sock = bind_mcast_sock(1902, None).await;
 
     sock.try_send_mcast_everywhere(&|opts| {
         if opts.iface_ip().is_ipv4() {
@@ -95,7 +97,7 @@ async fn test_v4_received() {
 #[tokio::test]
 async fn test_v6_received() {
     setup_test_logging();
-    let sock = bind_mcast_sock(1903).await;
+    let sock = bind_mcast_sock(1903, None).await;
 
     sock.try_send_mcast_everywhere(&|opts| {
         if opts.iface_ip().is_ipv6() {
@@ -119,8 +121,8 @@ async fn test_v6_received() {
 #[tokio::test]
 async fn bind_multiple_same_port() {
     setup_test_logging();
-    let sock1 = bind_mcast_sock(1904).await;
-    let sock2 = bind_mcast_sock(1904).await;
+    let sock1 = bind_mcast_sock(1904, None).await;
+    let sock2 = bind_mcast_sock(1904, None).await;
 
     sock1
         .try_send_mcast_everywhere(&|opts| {
@@ -156,5 +158,35 @@ async fn bind_multiple_same_port() {
         .unwrap();
     assert_eq!(sz, 5);
     assert!(addr.is_ipv4(), "{addr:?} expected v4");
+    assert_eq!(&buf, b"hello");
+}
+
+#[cfg(not(windows))]
+#[tokio::test]
+async fn test_mcast_bind_device() {
+    use crate::bind_device::tests::find_localhost_name;
+
+    setup_test_logging();
+
+    let lo = find_localhost_name();
+
+    let sock = bind_mcast_sock(1905, Some(&lo)).await;
+
+    sock.try_send_mcast_everywhere(&|opts| {
+        if opts.iface_ip().is_ipv6() {
+            Some("hello".into())
+        } else {
+            None
+        }
+    })
+    .await;
+
+    let mut buf = [0u8; 5];
+    let (sz, addr) = timeout(Duration::from_millis(100), sock.recv_from(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(sz, 5);
+    assert!(addr.is_ipv6(), "{addr:?} expected v6");
     assert_eq!(&buf, b"hello");
 }

@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use crate::Error;
 use std::{ffi::CString, num::NonZeroU32, str::FromStr};
@@ -28,6 +28,15 @@ impl BindDevice {
         Err(Error::BindDeviceNotSupported)
     }
 
+    pub fn index(&self) -> NonZeroU32 {
+        self.index
+    }
+
+    pub fn name(&self) -> &str {
+        // We constructed from a string so this can't fail
+        unsafe { std::str::from_utf8_unchecked(self.name.to_bytes()) }
+    }
+
     #[cfg(target_os = "macos")]
     pub fn bind_sref(&self, sref: &socket2::Socket, is_v6: bool) -> crate::Result<()> {
         if is_v6 {
@@ -41,7 +50,7 @@ impl BindDevice {
 
     #[cfg(not(any(target_os = "macos", windows)))]
     pub fn bind_sref(&self, sref: &socket2::Socket, _is_v6: bool) -> crate::Result<()> {
-        let name = self.name.as_bytes();
+        let name = self.name.as_bytes_with_nul();
         sref.bind_device(Some(name))
             .map_err(Error::BindDeviceSetDeviceError)
     }

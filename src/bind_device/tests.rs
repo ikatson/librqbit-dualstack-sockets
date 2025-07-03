@@ -5,7 +5,7 @@ use tokio::time::timeout;
 
 use crate::{BindDevice, ConnectOpts, tcp_connect};
 
-fn find_localhost_name() -> String {
+pub fn find_localhost_name() -> String {
     let nics = NetworkInterface::show().unwrap();
     nics.into_iter()
         .find(|nic| nic.addr.iter().any(|a| a.ip().is_loopback()))
