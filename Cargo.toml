@@ -1,6 +1,6 @@
 [package]
 name = "librqbit-dualstack-sockets"
-version = "0.6.10"
+version = "0.6.11"
 edition = "2024"
 
 description = "utilities for creating dual-stack TCP and UDP tokio sockets"
@@ -15,7 +15,7 @@ axum = { version = "0.8.4", default-features = false, optional = true, features 
     "http1",
 ] }
 backon = "1.5.1"
-socket2 = "0.5.10"
+socket2 = { version = "0.6", features = ["all"] }
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["net"] }
 tracing = "0.1.41"
