@@ -195,6 +195,60 @@ impl MaybeDualstackSocket<Socket> {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl TryFrom<std::os::fd::OwnedFd> for MaybeDualstackSocket<tokio::net::TcpListener> {
+    type Error = crate::Error;
+    /// Convert an owned file-descriptor to a tokio TCP Listener.
+    ///
+    /// If the passed file descriptor is not a TCP listener, the file descriptor will be closed and
+    /// this function will return an error.
+    fn try_from(fd: std::os::fd::OwnedFd) -> Result<Self, Self::Error> {
+        use std::io;
+        let sock = Socket::from(fd);
+        match sock.protocol().map_err(Error::SocketFromFd)? {
+            Some(socket2::Protocol::TCP) => {}
+            Some(proto) => {
+                return Err(Error::SocketFromFd(io::Error::other(format!(
+                    "expected a TCP socket, got a {proto:?} socket"
+                ))));
+            }
+            None => {
+                return Err(Error::SocketFromFd(io::Error::other(
+                    "socket has no protocol",
+                )));
+            }
+        };
+
+        if !sock.is_listener().map_err(Error::SocketFromFd)? {
+            return Err(Error::SocketFromFd(io::Error::other(
+                "expected a listening TCP socket",
+            )));
+        }
+
+        let addr_kind = match sock
+            .local_addr()
+            .map_err(Error::LocalAddr)?
+            .as_socket()
+            .ok_or(Error::AsSocket)?
+        {
+            SocketAddr::V4(addr) => SocketAddrKind::V4(addr),
+            SocketAddr::V6(addr) => SocketAddrKind::V6 {
+                addr,
+                is_dualstack: addr.ip().is_unspecified()
+                    && !sock.only_v6().map_err(Error::SocketFromFd)?,
+            },
+        };
+
+        sock.set_nonblocking(true).map_err(Error::SetNonblocking)?;
+
+        Ok(Self {
+            addr_kind,
+            socket: tokio::net::TcpListener::from_std(std::net::TcpListener::from(sock))
+                .map_err(Error::TokioFromStd)?,
+        })
+    }
+}
+
 impl MaybeDualstackSocket<tokio::net::TcpListener> {
     pub fn bind_tcp(addr: SocketAddr, opts: BindOpts) -> crate::Result<Self> {
         let sock = MaybeDualstackSocket::bind(addr, opts, false)?;

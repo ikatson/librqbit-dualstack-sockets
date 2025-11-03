@@ -1,5 +1,7 @@
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("error taking ownership of a socket from a file descriptor: {0}")]
+    SocketFromFd(std::io::Error),
     #[error("error creating socket: {0}")]
     SocketNew(std::io::Error),
     #[error("error binding: {0}")]
