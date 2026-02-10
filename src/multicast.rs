@@ -34,10 +34,10 @@ impl MulticastUdpSocket {
         ipv6_link_local_addr: Option<SocketAddrV6>,
         bind_device: Option<&BindDevice>,
     ) -> crate::Result<Self> {
-        if let Some(ll) = ipv6_link_local_addr {
-            if !ll.ip().is_link_local_mcast() {
-                return Err(Error::ProvidedLinkLocalAddrIsntLinkLocal);
-            }
+        if let Some(ll) = ipv6_link_local_addr
+            && !ll.ip().is_link_local_mcast()
+        {
+            return Err(Error::ProvidedLinkLocalAddrIsntLinkLocal);
         }
         if !ipv6_site_local_addr.ip().is_site_local_mcast() {
             return Err(Error::ProvidedSiteLocalAddrIsNotSiteLocal);
@@ -134,10 +134,10 @@ impl MulticastUdpSocket {
                 joined |= try_join_v6(&self.sock, *self.ipv6_site_local.ip(), nic.index);
             }
 
-            if let Some(ll) = self.ipv6_link_local {
-                if has_link_local {
-                    joined |= try_join_v6(&self.sock, *ll.ip(), nic.index);
-                }
+            if let Some(ll) = self.ipv6_link_local
+                && has_link_local
+            {
+                joined |= try_join_v6(&self.sock, *ll.ip(), nic.index);
             }
         }
 
