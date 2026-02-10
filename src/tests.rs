@@ -406,3 +406,56 @@ async fn test_udp_ipv4_localhost() {
     )
     .await
 }
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn test_tcp_from_fd_dualstack() {
+    setup_test_logging();
+
+    use std::os::fd::OwnedFd;
+    let listener = std::net::TcpListener::bind("[::]:0").unwrap();
+    let fd: OwnedFd = listener.into();
+    let sock: TcpListener = fd.try_into().unwrap();
+    assert!(sock.is_dualstack());
+    assert!(sock.bind_addr().is_ipv6());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn test_tcp_from_fd_v6_only() {
+    setup_test_logging();
+
+    use std::os::fd::OwnedFd;
+    let listener = std::net::TcpListener::bind("[::1]:0").unwrap();
+    let fd: OwnedFd = listener.into();
+    let sock: TcpListener = fd.try_into().unwrap();
+    assert!(!sock.is_dualstack());
+    assert!(sock.bind_addr().is_ipv6());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn test_tcp_from_fd_v4_only() {
+    setup_test_logging();
+
+    use std::os::fd::OwnedFd;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let fd: OwnedFd = listener.into();
+    let sock: TcpListener = fd.try_into().unwrap();
+    assert!(!sock.is_dualstack());
+    assert!(sock.bind_addr().is_ipv4());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn test_tcp_from_fd_wrong_socket() {
+    setup_test_logging();
+
+    use std::os::fd::OwnedFd;
+    let udp_socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let fd: OwnedFd = udp_socket.into();
+    assert!(
+        TcpListener::try_from(fd).is_err(),
+        "should not convert a UDP socket into a TCP listener",
+    );
+}
