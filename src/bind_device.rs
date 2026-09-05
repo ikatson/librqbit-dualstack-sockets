@@ -37,7 +37,7 @@ impl BindDevice {
         unsafe { std::str::from_utf8_unchecked(self.name.to_bytes()) }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub fn bind_sref(&self, sref: &socket2::Socket, is_v6: bool) -> crate::Result<()> {
         if is_v6 {
             sref.bind_device_by_index_v6(Some(self.index))
@@ -48,7 +48,7 @@ impl BindDevice {
         }
     }
 
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(target_os = "macos", target_os = "ios", windows)))]
     pub fn bind_sref(&self, sref: &socket2::Socket, _is_v6: bool) -> crate::Result<()> {
         let name = self.name.as_bytes_with_nul();
         sref.bind_device(Some(name))
