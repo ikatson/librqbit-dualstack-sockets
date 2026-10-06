@@ -71,6 +71,7 @@ impl MulticastUdpSocket {
         &self.nics
     }
 
+    /// See [`crate::UdpSocket::recv_from`].
     pub async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, SocketAddr)> {
         self.sock.recv_from(buf).await
     }

@@ -5,6 +5,7 @@ mod bind_device;
 mod connect;
 mod error;
 mod multicast;
+mod recv;
 mod traits;
 pub use error::{Error, Result};
 

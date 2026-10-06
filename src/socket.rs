@@ -333,6 +333,8 @@ pub mod axum {
 impl MaybeDualstackSocket<tokio::net::UdpSocket> {
     pub fn bind_udp(addr: SocketAddr, opts: BindOpts) -> crate::Result<Self> {
         let sock = MaybeDualstackSocket::bind(addr, opts, true)?;
+        #[cfg(windows)]
+        crate::recv::disable_udp_reset_errors(&sock.socket);
 
         debug!(addr=?sock.bind_addr(), requested_addr=?addr, dualstack = sock.is_dualstack(), "listening on UDP");
 
@@ -343,9 +345,27 @@ impl MaybeDualstackSocket<tokio::net::UdpSocket> {
         })
     }
 
+    /// Receives a datagram.
+    ///
+    /// Errors that concern a single datagram, or a datagram sent earlier, are
+    /// skipped: e.g. an ICMP "port unreachable" reply, or on Windows a
+    /// datagram larger than `buf`. An error returned from here is about the
+    /// socket itself.
+    ///
+    /// The skipped errors don't say which peer they are about, so they can't
+    /// be used to detect a dead peer.
+    ///
+    /// This is cancel safe.
     pub async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, SocketAddr)> {
-        let (size, addr) = self.socket.recv_from(buf).await?;
-        Ok((size, addr.try_to_ipv4()))
+        loop {
+            match self.socket.recv_from(buf).await {
+                Ok((size, addr)) => return Ok((size, addr.try_to_ipv4())),
+                Err(e) if crate::recv::is_per_datagram_error(&e) => {
+                    debug!("ignoring receive error: {e:#}");
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> std::io::Result<usize> {

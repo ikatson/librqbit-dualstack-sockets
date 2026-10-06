@@ -459,3 +459,128 @@ async fn test_tcp_from_fd_wrong_socket() {
         "should not convert a UDP socket into a TCP listener",
     );
 }
+
+/// A receive error caused by a datagram we sent must not surface in
+/// recv_from(), and must not cost us the datagrams that follow.
+///
+/// Linux doesn't report ICMP errors on unconnected UDP sockets, unlike
+/// Windows, unless asked to with IP_RECVERR. That gives us a real error to
+/// test with.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn test_udp_recv_from_skips_per_datagram_errors() {
+    use std::os::fd::AsRawFd;
+
+    setup_test_logging();
+
+    let sock = UdpSocket::bind_udp(ipv4_localhost(), BindOpts::default()).unwrap();
+    let on: libc::c_int = 1;
+    let rc = unsafe {
+        libc::setsockopt(
+            sock.socket().as_raw_fd(),
+            libc::SOL_IP,
+            libc::IP_RECVERR,
+            (&raw const on).cast(),
+            size_of_val(&on) as libc::socklen_t,
+        )
+    };
+    assert_eq!(rc, 0, "{}", std::io::Error::last_os_error());
+
+    // A port that nothing listens on.
+    let closed = {
+        let s = std::net::UdpSocket::bind(ipv4_localhost()).unwrap();
+        s.local_addr().unwrap()
+    };
+
+    let mut buf = [0u8; 64];
+
+    // Make sure this actually produces a receive error, with a raw read.
+    // (A pending error alone doesn't make the socket readable, so an async
+    // read would only see it once the next datagram arrives.)
+    sock.send_to(b"nobody home", closed).await.unwrap();
+    let raw = socket2::SockRef::from(sock.socket());
+    let mut raw_buf = [std::mem::MaybeUninit::<u8>::uninit(); 64];
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let err = loop {
+        match raw.recv_from(&mut raw_buf) {
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the ICMP error never arrived"
+                );
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            Err(e) => break e,
+            Ok(_) => panic!("expected the ICMP error, received a datagram"),
+        }
+    };
+    assert_eq!(err.kind(), std::io::ErrorKind::ConnectionRefused);
+
+    // Now the same through our recv_from(): the error is skipped, and the
+    // datagram that comes after it is returned.
+    sock.send_to(b"nobody home", closed).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let peer = UdpSocket::bind_udp(ipv4_localhost(), BindOpts::default()).unwrap();
+    peer.send_to(b"hello", sock.bind_addr()).await.unwrap();
+
+    let (size, addr) = timeout(TIMEOUT, sock.recv_from(&mut buf))
+        .await
+        .expect("timed out")
+        .expect("recv_from() returned a per-datagram error");
+    assert_eq!(&buf[..size], b"hello");
+    assert_eq!(addr, peer.bind_addr());
+}
+
+/// The receive futures must be usable from tasks that move between threads.
+#[tokio::test]
+async fn test_udp_recv_futures_are_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>(_: &T) {}
+
+    let sock = UdpSocket::bind_udp(ipv4_localhost(), BindOpts::default()).unwrap();
+    let mut buf = [0u8; 16];
+    assert_send_sync(&sock.recv_from(&mut buf));
+
+    let mcast = crate::MulticastUdpSocket::new(
+        (Ipv6Addr::UNSPECIFIED, 0).into(),
+        "239.255.255.250:1900".parse().unwrap(),
+        "[ff05::c]:1900".parse().unwrap(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert_send_sync(&mcast.recv_from(&mut buf));
+}
+
+/// Windows fails the receive of a datagram larger than the buffer with
+/// WSAEMSGSIZE, where Unix truncates it silently. Check that, and that our
+/// recv_from() just drops the datagram.
+#[cfg(windows)]
+#[tokio::test]
+async fn test_udp_recv_from_skips_oversized_datagrams() {
+    setup_test_logging();
+
+    let sock = UdpSocket::bind_udp(ipv4_localhost(), BindOpts::default()).unwrap();
+    let peer = UdpSocket::bind_udp(ipv4_localhost(), BindOpts::default()).unwrap();
+    let mut buf = [0u8; 16];
+
+    // Through the tokio socket directly, to see the platform's behaviour.
+    peer.send_to(&[1u8; 100], sock.bind_addr()).await.unwrap();
+    let err = timeout(TIMEOUT, sock.socket().recv_from(&mut buf))
+        .await
+        .expect("timed out")
+        .expect_err("expected WSAEMSGSIZE");
+    assert_eq!(err.raw_os_error(), Some(10040), "{err:?}");
+
+    // Through our recv_from(): the oversized one is dropped, the next one
+    // is returned.
+    peer.send_to(&[1u8; 100], sock.bind_addr()).await.unwrap();
+    peer.send_to(b"hello", sock.bind_addr()).await.unwrap();
+    let (size, addr) = timeout(TIMEOUT, sock.recv_from(&mut buf))
+        .await
+        .expect("timed out")
+        .expect("recv_from() returned a per-datagram error");
+    assert_eq!(&buf[..size], b"hello");
+    assert_eq!(addr, peer.bind_addr());
+}
