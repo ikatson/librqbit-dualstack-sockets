@@ -44,7 +44,7 @@ async fn test_bind_to_device() {
     )
     .await;
 
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     match &res {
         Ok(Ok(_)) => panic!("expected an error"),
         Ok(Err(e)) => {
@@ -55,7 +55,7 @@ async fn test_bind_to_device() {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(target_vendor = "apple"))]
     match &res {
         Ok(Ok(_)) => panic!("expected an error"),
         Ok(Err(e)) => {
