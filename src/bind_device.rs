@@ -24,7 +24,7 @@ impl BindDevice {
     }
 
     #[cfg(windows)]
-    pub fn new_from_name(name: &str) -> crate::Result<Self> {
+    pub fn new_from_name(_name: &str) -> crate::Result<Self> {
         Err(Error::BindDeviceNotSupported)
     }
 
@@ -48,14 +48,21 @@ impl BindDevice {
         }
     }
 
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
     pub fn bind_sref(&self, sref: &socket2::Socket, _is_v6: bool) -> crate::Result<()> {
         let name = self.name.as_bytes_with_nul();
         sref.bind_device(Some(name))
             .map_err(Error::BindDeviceSetDeviceError)
     }
 
-    #[cfg(windows)]
+    // socket2 exposes neither SO_BINDTODEVICE nor the macOS index-based
+    // operations on BSD. Never report success without enforcing the binding.
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "fuchsia"
+    )))]
     pub fn bind_sref(&self, _sref: &socket2::Socket, _is_v6: bool) -> crate::Result<()> {
         Err(Error::BindDeviceNotSupported)
     }
@@ -66,5 +73,29 @@ impl FromStr for BindDevice {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::new_from_name(s)
+    }
+}
+
+#[cfg(all(
+    test,
+    any(
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    )
+))]
+mod unsupported_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_binding_is_not_silently_ignored() {
+        let device = BindDevice::new_from_name(&tests::find_localhost_name()).unwrap();
+        let socket =
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None).unwrap();
+        assert!(matches!(
+            device.bind_sref(&socket, false),
+            Err(Error::BindDeviceNotSupported)
+        ));
     }
 }
